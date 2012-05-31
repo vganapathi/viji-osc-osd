@@ -21,13 +21,24 @@
 #include <sqlite3.h>
 #include "osd-types.h"
 
+/* 
+ * Encapsulate all db structs in db context. each db context is handled by an
+ * independent thread.
+ */
+struct db_context {
+  sqlite3 *db;
+  struct coll_tab *coll;
+  struct obj_tab *obj;
+  struct attr_tab *attr;
+};
+
 int osd_db_open(const char *path, struct osd_device *osd);
 
 int osd_db_close(struct osd_device *osd);
 
-int db_initialize(struct db_context *dbc);
+int db_initialize(struct handle *handle);
 
-int db_finalize(struct db_context *dbc);
+int db_finalize(struct handle *handle);
 
 int db_begin_txn(struct db_context *dbc);
 
@@ -64,17 +75,18 @@ static inline void db_sqfinalize(sqlite3 *db, sqlite3_stmt *stmt,
  * OSD_OK: success
  * OSD_REPEAT: stmt needs to be run again
  */
-static inline int db_reset_stmt(struct db_context *dbc, sqlite3_stmt *stmt,
+static inline int db_reset_stmt(struct handle *handle, sqlite3_stmt *stmt,
 				int bound, const char *func)
 {
+  struct db_context *dbc = handle->dbc;
 	int ret = sqlite3_reset(stmt);
 	if (!bound) {
 		return OSD_ERROR;
 	} else if (ret == SQLITE_OK) {
 		return OSD_OK;
 	} else if (ret == SQLITE_SCHEMA) {
-		db_finalize(dbc);
-		ret = db_initialize(dbc);
+		db_finalize(handle);
+		ret = db_initialize(handle);
 		if (ret == OSD_OK)
 			return OSD_REPEAT;
 	} 
@@ -83,7 +95,7 @@ static inline int db_reset_stmt(struct db_context *dbc, sqlite3_stmt *stmt,
 }
 
 
-int db_exec_dms(struct db_context *dbc, sqlite3_stmt *stmt, int ret, 
+int db_exec_dms(struct handle *handle, sqlite3_stmt *stmt, int ret, 
 		const char *func);
 
 int db_exec_id_rtrvl_stmt(struct db_context *dbc, sqlite3_stmt *stmt, 

@@ -18,7 +18,9 @@
 #ifndef __OSD_H
 #define __OSD_H
 
+#include <stdio.h>
 #include "osd-types.h"
+#include "osd-util/osd-util.h"
 #include "cdb.h"
 
 /* to make sense data for some higher error */
@@ -28,6 +30,11 @@ int osd_error_bad_cdb(uint8_t *sense);
 /* db ops */
 int osd_begin_txn(struct osd_device *osd);
 int osd_end_txn(struct osd_device *osd);
+
+static const char *md = "md";
+static const char *dbname = "osd.db";
+static const char *dfiles = "dfiles";
+static const char *stranded = "stranded";
 
 /*
  * Commands.
@@ -94,7 +101,7 @@ int osd_punch(struct osd_device *osd, uint64_t pid, uint64_t oid, uint64_t len,
 int osd_query(struct osd_device *osd, uint64_t pid, uint64_t cid,
 	      uint32_t query_list_len, uint64_t alloc_len, const void *indata,
 	      void *outdata, uint64_t *used_outlen, uint32_t cdb_cont_len, uint8_t *sense);
-int osd_read(struct osd_device *osd, uint64_t pid, uint64_t uid, uint64_t len,
+int osd_read_device(struct osd_device *osd, uint64_t pid, uint64_t uid, uint64_t len,
 	     uint64_t offset, const uint8_t *indata, uint8_t *outdata, uint64_t *outlen,
 	     const struct sg_list *sglist, uint8_t *sense, uint8_t ddt);
 int osd_read_map(struct osd_device *osd, uint64_t pid, uint64_t oid, uint64_t alloc_len,
@@ -137,6 +144,38 @@ int osd_gen_cas(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		uint8_t **orig_val, uint16_t *orig_len, uint8_t *sense);
 
 /* helper functions */
+static inline void get_dfile_name(char *path, const char *root,
+				  uint64_t pid, uint64_t oid)
+{
+#ifdef PVFS_OSD_INTEGRATED
+	/* go look in PVFS bstreams for file data (eventually) */
+	sprintf(path, "%s/%08llx/bstreams/%.8llu/%08llx.bstream", root,
+	        llu(pid), llu(oid % 64), llu(oid));
+	printf("root = %s collid = 0x%llx\n", root, llu(pid));
+#elif defined (__PANASAS_OSDSIM__)
+	if (!oid)
+		sprintf(path, "%s/%s/%llu", root, dfiles, llu(pid));
+	else
+		sprintf(path, "%s/%s/%llu/%llu/data", root, dfiles,
+			llu(pid), llu(oid));
+#elif defined (__PANASAS_OSD__)
+	if (!oid)
+		sprintf(path, "%s/%s/%llu", root, dfiles, llu(pid));
+	else if (!pid)
+		sprintf(path, "%s/%s", root, dfiles);
+  else
+		sprintf(path, "%s/%s/%llu/%llu", root, dfiles,
+			llu(pid), llu(oid));
+#else
+	if (!oid)
+		sprintf(path, "%s/%s/%02x", root, dfiles,
+			(uint8_t)(oid & 0xFFUL));
+	else
+		sprintf(path, "%s/%s/%02x/%llx.%llx", root, dfiles,
+			(uint8_t)(oid & 0xFFUL), llu(pid), llu(oid));
+#endif
+}
+
 static inline uint64_t osd_get_created_oid(struct osd_device *osd,
 					   uint32_t numoid)
 {
@@ -144,6 +183,19 @@ static inline uint64_t osd_get_created_oid(struct osd_device *osd,
 	if (numoid > 0)
 		oid -= (numoid - 1);
 	return oid;
+}
+
+static inline void fill_ccap(struct cur_cmd_attr_pg *ccap, uint8_t *ricv,
+			     uint8_t obj_type, uint64_t pid, uint64_t oid,
+			     uint64_t append_off)
+{
+	memset(ccap, 0, sizeof(*ccap));
+	if (ricv)
+		memcpy(ccap->ricv, ricv, sizeof(ccap->ricv));
+	ccap->obj_type = obj_type;
+	ccap->pid = pid;
+	ccap->oid = oid;
+	ccap->append_off = append_off;
 }
 
 #endif /* __OSD_H */

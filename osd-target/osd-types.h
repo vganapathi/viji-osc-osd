@@ -21,7 +21,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <sqlite3.h>
 
 #include "osd-util/osd-defs.h"
 
@@ -167,33 +166,27 @@ struct coll_tab;
 struct obj_tab;
 struct attr_tab;
 
-/* 
- * Encapsulate all db structs in db context. each db context is handled by an
- * independent thread.
- */
-struct db_context {
-	sqlite3 *db;
-	struct coll_tab *coll;
-	struct obj_tab *obj;
-	struct attr_tab *attr;
-};
-
 /*
  * 'osd_context' will replace 'osd_device' in future. Each osd context is a
  * thread safe structure allocated as a private data for the thread. Thread
  * specific state information will be contained in this struct
  */
 struct osd_context {
-	struct db_context *dbc;
+	void *handle;
 	struct cur_cmd_attr_pg ccap;
 	struct id_cache ic;
 	struct id_list idl;
 };
 
 
+struct handle {
+  struct db_context *dbc;
+  int fd;
+};
+
 struct osd_device {
 	char *root;
-	struct db_context *dbc;
+	struct handle *handle;
 	struct cur_cmd_attr_pg ccap;
 	struct id_cache ic;
 	struct id_list idl;

@@ -870,7 +870,7 @@ static int cdb_read(struct command *cmd, uint32_t cdb_cont_len)
 		ddt = DDT_CONTIG;
 	}
 
-	ret = osd_read(cmd->osd, pid, oid, len, offset, indata, cmd->outdata,
+	ret = osd_read_device(cmd->osd, pid, oid, len, offset, indata, cmd->outdata,
 		       &cmd->used_outlen, sglist, cmd->sense, ddt);
 	if (ret) {
 		/* only tolerate recovered error, return for others */
@@ -1532,7 +1532,7 @@ static void exec_service_action(struct command *cmd)
 	uint64_t oid = get_ntohll(&cdb[24]);
 	int ret;
 	
-//	osd_debug("%s: start 0x%04x", __func__, cmd->action);
+	osd_debug("%s: start 0x%x cdb_cont_len %llu", __func__, cmd->action, llu(cdb_cont_len));
 
 	if (cdb_cont_len != 0) {
 		ret = parse_cdb_continuation_segment(cmd, cdb_cont_len,
@@ -1540,6 +1540,7 @@ static void exec_service_action(struct command *cmd)
 		if (ret != OSD_OK)
 			goto out_exec;
 	}
+
 	
 	switch (cmd->action) {
 	case OSD_APPEND: {
@@ -1668,7 +1669,7 @@ static void exec_service_action(struct command *cmd)
 		break;
 	}
 	case OSD_CREATE_USER_TRACKING_COLLECTION: {
-                uint64_t pid = get_ntohll(&cdb[16]);
+    uint64_t pid = get_ntohll(&cdb[16]);
 		uint64_t requested_cid = get_ntohll(&cdb[24]);
 		uint64_t source_cid = get_ntohll(&cdb[40]);
 		
