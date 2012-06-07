@@ -6,13 +6,13 @@
 
 ifeq ($(PANASAS_OSD),1)
 SRC := pan_attr.c pan_obj.c osd.c pan_io.c cdb.c osd-sense.c list-entry.c
-SRC += pan_coll.c pan_mtq.c
+INC := attr.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h
 else
-SRC := attr.c db.c obj.c osd-schema.c osd.c cdb.c osd-sense.c list-entry.c io.c
+SRC := attr.c db.c obj.c osd-schema.c osd.c io.c cdb.c osd-sense.c list-entry.c
 SRC += osd-schema.c coll.c mtq.c
-endif
 INC := attr.h db.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h
 INC += coll.h mtq.h
+endif
 DEP := .depend
 OBJ := $(SRC:.c=.o)
 TESTDIR := ./tests/
@@ -29,9 +29,9 @@ IB_HW_OF_LIBS= -L/usr/local/openib-iser/lib
 ifeq ($(FreeBSD_Make),1)
 LIBS += -L/usr/local/lib/
 ifeq ($(PANASAS_OSD),1)
-CFLAGS += -I/usr/local/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr -I../../../export/include/ 
+CFLAGS += -I/usr/local/include -I/usr/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr -I../../../export/include/ -I../../freebsd-c/sys/
 else
-CFLAGS += -I/usr/local/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr 
+CFLAGS += -I/usr/local/include -I/usr/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr 
 endif
 CFLAGS += -D__MAKE_BSD_BUILD__
 endif

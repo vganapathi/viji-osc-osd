@@ -18,45 +18,44 @@
 #ifndef __OBJ_H
 #define __OBJ_H
 
-#include <sqlite3.h>
 #include "osd-types.h"
 
-int obj_initialize(struct handle *ohandle);
+int obj_initialize(void *dbc);
 
-int obj_finalize(struct handle *ohandle);
+int obj_finalize(void *dbc);
 
-const char *obj_getname(struct handle *ohandle);
+const char *obj_getname(void *ohandle);
 
-int obj_insert(struct handle *ohandle, uint64_t pid, uint64_t oid, 
+int obj_insert(void *ohandle, uint64_t pid, uint64_t oid, 
 	       uint32_t type);
 
-int obj_delete(struct handle *ohandle, uint64_t pid, uint64_t oid);
+int obj_delete(void *ohandle, uint64_t pid, uint64_t oid);
 
-int obj_delete_pid(struct handle *ohandle, uint64_t pid);
+int obj_delete_pid(void *ohandle, uint64_t pid);
 
-int obj_get_nextoid(struct handle *ohandle, uint64_t pid, uint64_t *oid);
+int obj_get_nextoid(void *ohandle, uint64_t pid, uint64_t *oid);
 
-int obj_get_nextpid(struct handle *ohandle, uint64_t *pid);
+int obj_get_nextpid(void *ohandle, uint64_t *pid);
 
-int obj_ispresent(struct handle *ohandle, uint64_t pid, uint64_t oid, 
+int obj_ispresent(void *ohandle, char *root, uint64_t pid, uint64_t oid, 
 		  int *present);
 
-int obj_isempty_pid(struct handle *ohandle, uint64_t pid, int *isempty);
+int obj_isempty_pid(void *ohandle, char *root, uint64_t pid, int *isempty);
 
-int obj_get_type(struct handle *ohandle, uint64_t pid, uint64_t oid, 
+int obj_get_type(void *ohandle, uint64_t pid, uint64_t oid, 
 		 uint8_t *obj_type);
 
-int obj_get_oids_in_pid(struct handle *ohandle, uint64_t pid, 
+int obj_get_oids_in_pid(void *ohandle, uint64_t pid, 
 			uint64_t initial_oid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id);
 
-int obj_get_cids_in_pid(struct handle *ohandle, uint64_t pid, 
+int obj_get_cids_in_pid(void *ohandle, uint64_t pid, 
 			uint64_t initial_cid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id);
 
-int obj_get_all_pids(struct handle *ohandle, uint64_t initial_oid, 
+int obj_get_all_pids(void *ohandle, uint64_t initial_oid, 
 		     uint64_t alloc_len, uint8_t *outdata,
 		     uint64_t *used_outlen, uint64_t *add_len,
 		     uint64_t *cont_id);

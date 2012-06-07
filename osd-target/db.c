@@ -89,8 +89,8 @@ int osd_db_open(const char *path, struct osd_device *osd)
 	ret = stat(path, &sb);
 	if (ret == 0) {
 		if (!S_ISREG(sb.st_mode)) {
-			osd_error("%s: path %s not a regular file", 
-				  __func__, path);
+			osd_error("%s: path %s not a regular file %d", 
+				  __func__, path, sb.st_mode);
 			ret = 1;
 			goto out;
 		}
@@ -104,13 +104,13 @@ int osd_db_open(const char *path, struct osd_device *osd)
 		is_new_db = 1;
 	}
 
-	osd->dbc = Calloc(1, sizeof(*osd->dbc));
-	if (!osd->dbc) {
+	osd->handle->dbc = Calloc(1, sizeof(*osd->handle->dbc));
+	if (!osd->handle->dbc) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ret = sqlite3_open(path, &(osd->dbc->db));
+	ret = sqlite3_open(path, &(osd->handle->dbc->db));
 	if (ret != SQLITE_OK) {
 		osd_error("%s: open db %s", __func__, path);
 		ret = OSD_ERROR;
@@ -119,7 +119,7 @@ int osd_db_open(const char *path, struct osd_device *osd)
 
 	if (is_new_db) {
 		/* build tables from schema file */
-		ret = sqlite3_exec(osd->dbc->db, osd_schema, NULL, NULL, &err);
+		ret = sqlite3_exec(osd->handle->dbc->db, osd_schema, NULL, NULL, &err);
 		if (ret != SQLITE_OK) {
 			sqlite3_free(err);
 			ret = OSD_ERROR;
@@ -127,13 +127,13 @@ int osd_db_open(const char *path, struct osd_device *osd)
 		}
 	} else {
 		/* existing db, check for tables */
-		ret = db_check_tables(osd->dbc);
+		ret = db_check_tables(osd->handle->dbc);
 		if (ret != OSD_OK)
 			goto out_close_db;
 	}
 
 	/* initialize dbc fields */
-	ret = db_initialize(osd->dbc);
+	ret = db_initialize(osd->handle->dbc);
 	if (ret != OSD_OK) {
 		ret = OSD_ERROR;
 		goto out_close_db;
@@ -144,10 +144,10 @@ int osd_db_open(const char *path, struct osd_device *osd)
 	goto out;
 
 out_close_db:
-	sqlite3_close(osd->dbc->db);
+	sqlite3_close(osd->handle->dbc->db);
 out_free_dbc:
-	free(osd->dbc);
-	osd->dbc = NULL;
+	free(osd->handle->dbc);
+	osd->handle->dbc = NULL;
 out:
 	return ret;
 }
@@ -157,12 +157,12 @@ int osd_db_close(struct osd_device *osd)
 {
 	int ret = 0;
 
-	assert(osd && osd->dbc && osd->dbc->db);
+	assert(osd && osd->handle->dbc && osd->dbc->db);
 
-	db_finalize(osd->dbc);
-	sqlite3_close(osd->dbc->db);
-	free(osd->dbc);
-	osd->dbc = NULL;
+	db_finalize(osd->handle->dbc);
+	sqlite3_close(osd->handle->dbc->db);
+	free(osd->handle->dbc);
+	osd->handle->dbc = NULL;
 
 	return OSD_OK;
 }

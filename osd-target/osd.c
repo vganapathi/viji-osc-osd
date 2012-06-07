@@ -29,7 +29,8 @@
 #include <assert.h>
 
 #include <linux/fs.h>
-#include <pan/osdfs/osd_ioctl.h>
+//VIJI
+//#include <pan/osdfs/osd_ioctl.h>
 
 #include "osd.h"
 #include "target-sense.h"
@@ -532,16 +533,53 @@ static int get_uiap(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		    uint32_t page, uint32_t number, void *outbuf,
 		    uint64_t outlen, uint8_t listfmt, uint32_t *used_outlen)
 {
+
+  int ret = 0;
+  char path[MAXNAMELEN];
+  void *val = NULL;
+  uint16_t len = 0;
+  uint8_t ll[8];
+  struct stat sb;
+  struct statfs sfs;
+  off_t sz =0;
+
 	
-  int ret = attr_get_attr(osd->handle, pid, oid, number, outlen, outbuf, listfmt, used_outlen);
-  if(ret)
-  {
-    osd_debug("%s: attr_get_attr return %d for attr %llu \n", __func__, ret, llu(number));
-    return OSD_ERROR;
+  switch(number){
+    case PARTITION_CAPACITY_QUOTA:
+      len = UIAP_USED_CAPACITY_LEN;
+      get_dfile_name(path, osd->root, pid, oid);
+      ret = statfs(path, &sfs);
+      osd_debug("PARTITION_CAPACITY_QUOTA statfs(%s)=>%d size=0x%llx\n",
+          path, ret, llu(sfs.f_blocks));
+      if (ret != 0)
+        return OSD_ERROR;
+      sz = sfs.f_blocks * BLOCK_SZ;
+      set_htonll(ll, sz);
+      val = ll;
+      break;
+    case UIAP_LOGICAL_LEN:
+      len = UIAP_LOGICAL_LEN_LEN;
+      get_dfile_name(path, osd->root, pid, oid);
+      ret = stat(path, &sb);
+      if (ret != 0)
+        return OSD_ERROR;
+      set_htonll(ll, sb.st_size);
+      val = ll;
+      break;
+    default:
+      ret = attr_get_attr(osd->handle, pid, oid, number, outlen, outbuf, 
+          listfmt, used_outlen);
+      if(ret)
+      {
+        osd_debug("%s: attr_get_attr return %d for attr %llu \n", 
+            __func__, ret, llu(number));
+        return OSD_ERROR;
+      }
+      int len = outlen;
+      char *val = outbuf;
+      break;
   }
 
-  int len = outlen;
-  char *val = outbuf;
 
 	if (listfmt == RTRVD_SET_ATTR_LIST)
 		ret = le_pack_attr(outbuf, outlen, page, number, len, val);
@@ -571,11 +609,22 @@ static int set_uiap(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		    uint32_t number, const void *val, uint16_t len)
 {
 	int ret = 0;
+  char path[MAXNAMELEN];
+  uint8_t ll[8];
 
 	switch (number) {
 	case UIAP_USERNAME:
-	case UIAP_LOGICAL_LEN: 
 		return attr_set_attr(osd->handle, pid, oid, number, val, len);
+	case UIAP_LOGICAL_LEN: 
+    len = get_ntohll((const uint8_t *)val);
+    get_dfile_name(path, osd->root, pid, oid);
+    osd_debug("%s: %s %llu\n", __func__, path, llu(len));
+    ret = truncate(path, len);
+    if (ret < 0)
+      return OSD_ERROR;
+    else
+      return OSD_OK;
+    break;
 	default:
 		return OSD_ERROR;
 	}
@@ -648,6 +697,21 @@ static int set_riap(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		    uint32_t number, const void *val, uint16_t len)
 {
 
+    if(number == RIAP_OSD_SYSTEM_ID) {
+      if (osd->ccap.cdb_srvc_act == OSD_FORMAT_OSD) {
+        char system_id[RIAP_OSD_SYSTEM_ID_LEN];
+        if (len > RIAP_OSD_SYSTEM_ID_LEN)
+          return -EINVAL;
+
+        if (len < RIAP_OSD_SYSTEM_ID_LEN) {
+          memcpy(system_id, val, len);
+          memset(system_id + len, 0, RIAP_OSD_SYSTEM_ID_LEN - len);
+          val = system_id;
+        } else
+        return OSD_ERROR;
+      }
+    }
+
 		return attr_set_attr(osd->handle, pid, oid, 
 					number, val, len);
 }
@@ -691,7 +755,7 @@ static int set_cap(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		return OSD_ERROR;
 
 	cid = get_ntohll(val);
-	ret = obj_ispresent(osd->handle, pid, cid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, cid, &present);
 	if (ret != OSD_OK || !present)
 		return OSD_ERROR;
 
@@ -724,15 +788,21 @@ static int osd_initialize_db(struct osd_device *osd)
 	/* tables already created by osd_db_open, so insertions can be done */
 	ret = obj_insert(osd->handle, ROOT_PID, ROOT_OID, ROOT);
 	if (ret != SQLITE_OK)
+  {
+    osd_error("%s: !obj_insert %d", __func__, ret);
 		goto out;
+  }
 
 	/* set root object attributes */
 	for (i=0; i<ARRAY_SIZE(root_info); i++) {
 		struct init_attr *ia = &root_info[i];
-		ret = attr_set_attr(osd->handle, ROOT_PID , ROOT_OID, 
-				    ia->number, ia->s, strlen(ia->s)+1);
+		ret = _attr_set_attr(osd->handle, ROOT_PID , ROOT_OID, 
+				    ia->page, ia->number, ia->s, strlen(ia->s)+1);
 		if (ret != SQLITE_OK)
+    {
+      osd_error("%s: root attr_set_attr %d", __func__, ret);
 			goto out;
+    }
 	}
 
 	/*
@@ -742,15 +812,23 @@ static int osd_initialize_db(struct osd_device *osd)
 	 */
 	for (i=0; i<ARRAY_SIZE(partition_info); i++) {
 		struct init_attr *ia = &partition_info[i];
-		ret = attr_set_attr(osd->handle, ROOT_PID, ROOT_OID, 
-				    ia->number, ia->s, strlen(ia->s)+1);
+		ret = _attr_set_attr(osd->handle, ROOT_PID, ROOT_OID, 
+				    ia->page, ia->number, ia->s, strlen(ia->s)+1);
 		if (ret)
+    {
+      osd_error("%s: !attr_set_attr %d", __func__, ret);
 			goto out;
+    }
 	}
 
 	/* assign pid as attr, osd2r00 Section 7.1.2.9 table 92  */
 	ret = attr_set_attr(osd->handle, ROOT_PID, ROOT_OID, 1,
 			    &pid, sizeof(pid));
+  if(ret)
+  {
+    osd_error("%s: pid attr_set_attr %d", __func__, ret);
+    goto out;
+  }
 
 out:
 	return ret;
@@ -835,21 +913,21 @@ int osd_open(const char *root, struct osd_device *osd)
 		ret = -ENOMEM;
 		goto out;
 	}
-	get_dbname(path, root);
 
-	/* auto-creates db if necessary, and sets osd->handle */
-  sprintf(path, "%s/%s", root, dfiles);
+	osd->handle = malloc(sizeof(*osd->handle));
 
 #ifdef __PANASAS_OSD__
-  osd->handle = malloc(sizeof(*osd->handle));
-  int fd =open("/pandata", O_RDONLY);
-  if(fd < 0){
-    osd_error("could not open osd->handle %d, %s", fd, strerror(errno));
-  }
-  osd->handle->fd = fd;
-  osd_debug("%s: fd %d", __func__, fd);
+	sprintf(path, "%s/%s", root, dfiles);
+	int fd = open(path, O_RDONLY);
+	if(fd < 0){
+		osd_error("could not open osd->handle %d, %s", fd, strerror(errno));
+	}
+	osd->handle->fd = fd;
+	osd_debug("%s: fd %d", __func__, fd);
 
 #else
+	/* auto-creates db if necessary, and sets osd->handle */
+	get_dbname(path, root);
 	ret = osd_db_open(path, osd);
 	if (ret != 0 && ret != 1) {
 		osd_error("!osd_db_open(%s)", path);
@@ -862,13 +940,13 @@ int osd_open(const char *root, struct osd_device *osd)
 			goto out;
 		}
 	}
-	ret = db_exec_pragma(osd->handle);
+	ret = db_exec_pragma(osd->handle->dbc);
 
 #endif
 
 out:
 	if (ret != 0)
-		osd_error("!db_exec_pragma => %d", ret);
+		osd_error("%s: => %d", __func__, ret);
 
 	return ret;
 }
@@ -1348,16 +1426,16 @@ int osd_copy_user_objects(struct osd_device *osd, uint64_t pid, uint64_t request
 	source_oid = get_ntohll(&cuos->source_oid);
 
 	/* verify that source_pid & source_oid exist */
-	ret = obj_ispresent(osd->handle, source_pid, PARTITION_OID, &present);
+	ret = obj_ispresent(osd->handle, osd->root, source_pid, PARTITION_OID, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
-	ret = obj_ispresent(osd->handle, source_pid, source_oid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, source_pid, source_oid, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
 	/* verify that destination_pid exists */
-	ret = obj_ispresent(osd->handle, pid, PARTITION_OID, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, PARTITION_OID, &present);
 	if (ret != OSD_OK || !present)
 	        goto out_cdb_err;
 
@@ -1377,7 +1455,7 @@ int osd_copy_user_objects(struct osd_device *osd, uint64_t pid, uint64_t request
 			osd->ic.next_id = oid + 1;
 		}  
 	} else {
-	        ret = obj_ispresent(osd->handle, pid, requested_oid, &present);
+	        ret = obj_ispresent(osd->handle, osd->root, pid, requested_oid, &present);
 		if (ret != OSD_OK || present)
 			goto out_cdb_err; /* requested_oid exists! */
 		oid = requested_oid; /* requested_oid works! */
@@ -1434,7 +1512,7 @@ int osd_create(struct osd_device *osd, uint64_t pid, uint64_t requested_oid,
 		goto out_illegal_req;
 
 	/* Make sure partition is present. */
-	ret = obj_ispresent(osd->handle, pid, PARTITION_OID, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, PARTITION_OID, &present);
 	if (ret != OSD_OK || !present)
 		goto out_illegal_req;
 
@@ -1461,7 +1539,7 @@ int osd_create(struct osd_device *osd, uint64_t pid, uint64_t requested_oid,
 			osd->ic.next_id = oid + 1;
 		}
 	} else {
-		ret = obj_ispresent(osd->handle, pid, requested_oid, &present);
+		ret = obj_ispresent(osd->handle, osd->root, pid, requested_oid, &present);
 		if (ret != OSD_OK || present)
 			goto out_illegal_req; /* requested_oid exists! */
 		oid = requested_oid; /* requested_oid works! */
@@ -1564,7 +1642,7 @@ int osd_create_collection(struct osd_device *osd, uint64_t pid,
 		goto out_cdb_err;
 
 	/* Make sure partition is present */
-	ret = obj_ispresent(osd->handle, pid, PARTITION_OID, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, PARTITION_OID, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
@@ -1593,7 +1671,7 @@ int osd_create_collection(struct osd_device *osd, uint64_t pid,
 		}
 	} else {
 		/* Make sure requested_cid doesn't already exist */
-		ret = obj_ispresent(osd->handle, pid, requested_cid, &present);
+		ret = obj_ispresent(osd->handle, osd->root, pid, requested_cid, &present);
 		if (ret != OSD_OK || present)
 			goto out_cdb_err;
 		cid = requested_cid;
@@ -1701,12 +1779,12 @@ int osd_create_user_tracking_collection(struct osd_device *osd, uint64_t pid,
 		goto out_cdb_err;
 
 	/* Make sure partition is present */
-	ret = obj_ispresent(osd->handle, pid, PARTITION_OID, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, PARTITION_OID, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
 	/* Make sure source collection is present */
-	ret = obj_ispresent(osd->handle, pid, source_cid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, source_cid, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
@@ -1751,7 +1829,7 @@ int osd_create_user_tracking_collection(struct osd_device *osd, uint64_t pid,
 
 	else {
 		/* Make sure requested_cid doesn't already exist */
-		ret = obj_ispresent(osd->handle, pid, requested_cid, &present);
+		ret = obj_ispresent(osd->handle, osd->root, pid, requested_cid, &present);
 		if (ret != OSD_OK || present)
 			goto out_cdb_err;
 		cid = requested_cid;
@@ -2677,7 +2755,7 @@ int osd_query(struct osd_device *osd, uint64_t pid, uint64_t cid,
 	if (pid < USEROBJECT_PID_LB)
 		goto out_cdb_err;
 
-	ret = obj_ispresent(osd->handle, pid, cid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, cid, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
@@ -2937,7 +3015,7 @@ int osd_remove_collection(struct osd_device *osd, uint64_t pid, uint64_t cid,
 		goto out_cdb_err;
 
 	/* make sure collection object is present */
-	ret = obj_ispresent(osd->handle, pid, cid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, cid, &present);
 	if (ret != OSD_OK || !present)
 		goto out_cdb_err;
 
@@ -3011,7 +3089,7 @@ int osd_remove_partition(struct osd_device *osd, uint64_t pid, uint32_t cdb_cont
 	if (pid == 0)
 		goto out_cdb_err;
 
-	ret = obj_isempty_pid(osd->handle, pid, &isempty);
+	ret = obj_isempty_pid(osd->handle, osd->root, pid, &isempty);
 	if (ret != OSD_OK || !isempty)
 		goto out_not_empty;
 
@@ -3079,7 +3157,7 @@ int osd_set_attributes(struct osd_device *osd, uint64_t pid, uint64_t oid,
 
 	assert(osd && osd->root && osd->handle && sense);
 
-	ret = obj_ispresent(osd->handle, pid, oid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, oid, &present);
 	if (ret != OSD_OK || !present) {/* object not present! */
 		osd_warning("%s: object not present pid %llu oid %llu", __func__,
 			  llu(pid), llu(oid));
@@ -3222,12 +3300,12 @@ int osd_set_member_attributes(struct osd_device *osd, uint64_t pid,
 
 	/* encapsulate all db ops in txn */
 #ifndef __PANASAS_OSD__
-	ret = db_begin_txn(osd->handle);
+	ret = db_begin_txn(osd->handle->dbc);
 #endif
 	assert(ret == 0);
 	within_txn = 1;
 
-	ret = obj_ispresent(osd->handle, pid, cid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, cid, &present);
 	if (ret != OSD_OK || !present) /* collection absent! */
 		goto out_cdb_err;
 
@@ -3249,7 +3327,7 @@ int osd_set_member_attributes(struct osd_device *osd, uint64_t pid,
 		goto out_hw_err;
 
 #ifndef __PANASAS_OSD__
-	ret = db_end_txn(osd->handle);
+	ret = db_end_txn(osd->handle->dbc);
 #endif
 	assert(ret == 0);
 
@@ -3259,7 +3337,7 @@ int osd_set_member_attributes(struct osd_device *osd, uint64_t pid,
 out_hw_err:
 	if (within_txn) {
 #ifndef __PANASAS_OSD__
-		ret = db_end_txn(osd->handle);
+		ret = db_end_txn(osd->handle->dbc);
 #endif
 		assert(ret == 0);
 	}
@@ -3269,7 +3347,7 @@ out_hw_err:
 out_param_list:
 	if (within_txn) {
 #ifndef __PANASAS_OSD__
-		ret = db_end_txn(osd->handle);
+		ret = db_end_txn(osd->handle->dbc);
 #endif
 		assert(ret == 0);
 	}
@@ -3279,7 +3357,7 @@ out_param_list:
 out_cdb_err:
 	if (within_txn) {
 #ifndef __PANASAS_OSD__
-		ret = db_end_txn(osd->handle);
+		ret = db_end_txn(osd->handle->dbc);
 #endif
 		assert(ret == 0);
 	}
@@ -3335,7 +3413,7 @@ int osd_cas(struct osd_device *osd, uint64_t pid, uint64_t oid, uint64_t cmp,
 
 	assert(osd && osd->handle && doutbuf && sense);
 
-	ret = obj_ispresent(osd->handle, pid, oid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, oid, &present);
 	if (ret != OSD_OK || !present) /* object not present! */
 		goto out_cdb_err;
 
@@ -3403,7 +3481,7 @@ int osd_fa(struct osd_device *osd, uint64_t pid, uint64_t oid, int64_t add,
 
 	assert(osd && osd->handle && doutbuf && sense);
 
-	ret = obj_ispresent(osd->handle, pid, oid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, oid, &present);
 	if (ret != OSD_OK || !present) /* object not present! */
 		goto out_cdb_err;
 
@@ -3472,7 +3550,7 @@ int osd_gen_cas(struct osd_device *osd, uint64_t pid, uint64_t oid,
 	if (!val)
 		goto out_hw_err;
 
-	ret = obj_ispresent(osd->handle, pid, oid, &present);
+	ret = obj_ispresent(osd->handle, osd->root, pid, oid, &present);
 	if (ret != OSD_OK || !present) /* object not present */
 		goto out_cdb_err;
 

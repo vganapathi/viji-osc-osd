@@ -29,6 +29,12 @@
 #include "osd-util/osd-util.h"
 #include "list-entry.h"
 
+#define min(x,y) ({ \
+            typeof(x) _x = (x);     \
+            typeof(y) _y = (y);     \
+            (void) (&_x == &_y);            \
+            _x < _y ? _x : _y; })
+
 /* attr table stores all the attributes of all the objects in the OSD */
 
 /* 40 bytes including terminating NUL */
@@ -57,10 +63,11 @@ struct attr_tab {
  * -EIO: if any prepare statement fails
  *  OSD_OK: success
  */
-int attr_initialize(struct db_context *dbc)
+int attr_initialize(void *db)
 {
 	int ret = 0;
 	int sqlret = 0;
+  	struct db_context *dbc = (struct db_context*)db;
 	char SQL[MAXSQLEN];
 
 	if (dbc == NULL || dbc->db == NULL) {
@@ -196,8 +203,9 @@ out:
 }
 
 
-int attr_finalize(struct db_context *dbc)
+int attr_finalize(void *db)
 {
+	struct db_context *dbc = (struct db_context*)db;
 	if (!dbc || !dbc->attr)
 		return OSD_ERROR;
 
@@ -219,13 +227,66 @@ int attr_finalize(struct db_context *dbc)
 }
 
 
-const char *attr_getname(struct db_context *dbc)
+const char *attr_getname(void *ohandle)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	if (dbc == NULL || dbc->attr == NULL)
 		return NULL;
 	return dbc->attr->name;
 }
 
+int attr_set_attr(void *ohandle, uint64_t pid, uint64_t oid, 
+		  uint32_t number, const void *val, uint16_t len)
+{
+  uint32_t page = 0;
+  char osdname[64];
+
+  switch(number) {
+#if 0
+    case UIAP_USERNAME:
+      page = USER_INFO_PG;
+      break;
+#endif
+    /* osd-target extension: We let in a system_ID set on LUN
+     * format command.
+     */
+    case RIAP_OSD_SYSTEM_ID:
+        page = ROOT_INFO_PG;
+        len = RIAP_OSD_SYSTEM_ID_LEN;
+        break;
+    case RIAP_OSD_NAME: {
+      snprintf(osdname, min((uint16_t)64U, len), "%s",
+          (const char *)val);
+      osd_info("RIAP_OSD_NAME [%s]\n", osdname);
+
+      page = ROOT_INFO_PG;
+      break;
+    }
+    case RIAP_CLOCK:
+		/* FIXME: Save an offset from current time.
+			 return time + offset */
+      return OSD_OK;
+
+    case UIAP_PID:
+      page = PARTITION_PG+1;
+      break;
+    /* read only */
+    case RIAP_VENDOR_IDENTIFICATION:
+    case RIAP_PRODUCT_IDENTIFICATION:
+    case RIAP_PRODUCT_MODEL:
+    case RIAP_PRODUCT_REVISION_LEVEL:
+    case RIAP_PRODUCT_SERIAL_NUMBER:
+    case RIAP_TOTAL_CAPACITY:
+    case RIAP_USED_CAPACITY:
+    case RIAP_NUMBER_OF_PARTITIONS:
+    default:
+      osd_error("%s: don't know how to set attr 0x%x", __func__, number);
+      return OSD_ERROR;
+	}
+
+  return _attr_set_attr(ohandle, pid, oid, page, number, val, len);
+
+}
 
 /*
  * Note: Current SQLITE INSERT syntax does not support bulk inserts in a
@@ -237,10 +298,11 @@ const char *attr_getname(struct db_context *dbc)
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int attr_set_attr(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int _attr_set_attr(void *ohandle, uint64_t pid, uint64_t oid, 
 		  uint32_t page, uint32_t number, const void *val, 
 		  uint16_t len)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
 
@@ -254,7 +316,7 @@ repeat:
 	ret |= sqlite3_bind_int(stmt, 3, page);
 	ret |= sqlite3_bind_int(stmt, 4, number);
 	ret |= sqlite3_bind_blob(stmt, 5, val, len, SQLITE_TRANSIENT);
-	ret = db_exec_dms(dbc, stmt, ret, __func__);
+	ret = db_exec_dms(ohandle, stmt, ret, __func__);
 	if (ret == OSD_REPEAT)
 		goto repeat;
 
@@ -268,9 +330,10 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int attr_delete_attr(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int attr_delete_attr(void *ohandle, uint64_t pid, uint64_t oid, 
 		     uint32_t page, uint32_t number)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
 
@@ -283,7 +346,7 @@ repeat:
 	ret |= sqlite3_bind_int64(stmt, 2, oid);
 	ret |= sqlite3_bind_int(stmt, 3, page);
 	ret |= sqlite3_bind_int(stmt, 4, number);
-	ret = db_exec_dms(dbc, stmt, ret, __func__);
+	ret = db_exec_dms(ohandle, stmt, ret, __func__);
 	if (ret == OSD_REPEAT)
 		goto repeat;
 
@@ -297,8 +360,9 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int attr_delete_all(struct db_context *dbc, uint64_t pid, uint64_t oid)
+int attr_delete_all(void *ohandle, uint64_t pid, uint64_t oid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->delall);
@@ -307,7 +371,7 @@ repeat:
 	ret = 0;
 	ret |= sqlite3_bind_int64(dbc->attr->delall, 1, pid);
 	ret |= sqlite3_bind_int64(dbc->attr->delall, 2, oid);
-	ret = db_exec_dms(dbc, dbc->attr->delall, ret, __func__);
+	ret = db_exec_dms(ohandle, dbc->attr->delall, ret, __func__);
 	if (ret == OSD_REPEAT)
 		goto repeat;
 
@@ -334,7 +398,7 @@ static int attr_gather_attr(sqlite3_stmt *stmt, void *buf, uint32_t buflen,
 	if (listfmt == RTRVD_SET_ATTR_LIST) {
 		return le_pack_attr(buf, buflen, page, number, len, val);
 	} else if (listfmt == RTRVD_CREATE_MULTIOBJ_LIST) {
-		return le_multiobj_pack_attr(buf, buflen, oid, page, number,
+    return le_multiobj_pack_attr(buf, buflen, oid, page, number,
 					     len, val);
 	} else {
 		return -EINVAL;
@@ -400,7 +464,7 @@ static int attr_gather_dir_page(sqlite3_stmt *stmt, uint32_t outlen,
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-static int exec_attr_rtrvl_stmt(struct db_context *dbc, sqlite3_stmt *stmt,
+static int exec_attr_rtrvl_stmt(void *ohandle, sqlite3_stmt *stmt,
 				int ret, const char *func, uint64_t oid, 
 				uint64_t page, int rtrvl_type, uint64_t outlen,
 				uint8_t *outdata, uint8_t listfmt,
@@ -410,6 +474,7 @@ static int exec_attr_rtrvl_stmt(struct db_context *dbc, sqlite3_stmt *stmt,
 	uint8_t found = 0;
 	uint8_t bound = (ret == SQLITE_OK);
 	uint8_t inval = 0;
+  struct db_context *dbc = ((struct handle *)ohandle)->dbc;
 
 	if (!bound) {
 		error_sql(dbc->db, "%s: bind failed", func);
@@ -451,7 +516,7 @@ static int exec_attr_rtrvl_stmt(struct db_context *dbc, sqlite3_stmt *stmt,
 	}
 
 out_reset:
-	ret = db_reset_stmt(dbc, stmt, bound, func);
+	ret = db_reset_stmt(ohandle, stmt, bound, func);
 	if (inval) {
 		ret = -EINVAL;
 	} else if (ret == OSD_OK) {
@@ -462,6 +527,89 @@ out_reset:
 	return ret;
 }
 
+int attr_get_attr(void *ohandle, uint64_t pid, uint64_t oid,
+		  uint32_t number, uint64_t outlen,
+		  void *outdata, uint8_t listfmt, uint32_t *used_outlen)
+{
+  char name[MAXNAMELEN];
+  uint32_t page;
+  int ret = 0;
+  uint8_t ll[8];
+
+  switch(number){
+    case 0:
+      /*{ROOT_PG + 1, 0, "INCITS  T10 Root Information"},*/
+      outlen = ATTR_PAGE_ID_LEN;
+      sprintf(name, "INCITS  T10 Root Information");
+      outdata = name;
+      break;
+    case RIAP_OSD_SYSTEM_ID:
+      ret = _attr_get_attr(ohandle, pid, oid, ROOT_INFO_PG,
+          RIAP_OSD_SYSTEM_ID_LEN, outlen, outdata,
+          listfmt, used_outlen);
+      if (ret == -ENOENT) {
+        outlen = RIAP_OSD_SYSTEM_ID_LEN;
+        sprintf(outdata, "%s", "\xf1\x81\x00\x0eOSC     OSDEMU\x00\x00");
+        return OSD_OK;
+      } else {
+        return ret;
+      }
+    case RIAP_VENDOR_IDENTIFICATION:
+      outlen = sizeof("OSC");
+      sprintf(outdata , "%s", "OSC");
+      break;
+    case RIAP_PRODUCT_IDENTIFICATION:
+      outlen = sizeof("OSDEMU");
+      sprintf(outdata, "%s", "OSDEMU");
+      break;
+    case RIAP_PRODUCT_MODEL:
+      outlen = sizeof("OSD2r05");
+      sprintf(outdata, "%s", "OSD2r05");
+      break;
+    case RIAP_PRODUCT_REVISION_LEVEL:
+      outlen = RIAP_PRODUCT_REVISION_LEVEL_LEN;
+      set_htonl(ll, 117);
+      outdata = ll;
+      break;
+    case RIAP_PRODUCT_SERIAL_NUMBER:
+      outlen = sizeof("2");
+      sprintf(outdata, "%s", "2");
+      break;
+    case RIAP_TOTAL_CAPACITY:
+      /*FIXME: return capacity of osd->root device*/
+      outlen = RIAP_TOTAL_CAPACITY_LEN;
+      set_htonll(ll, -1);
+      outdata = ll;
+      break;
+    case RIAP_USED_CAPACITY:
+      /*FIXME: return used capacity of osd->root device*/
+      outlen = RIAP_USED_CAPACITY_LEN;
+      set_htonll(ll, -1);
+      outdata = ll;
+      break;
+    case RIAP_NUMBER_OF_PARTITIONS:
+      /*FIXME: How to find this information*/
+      outlen = RIAP_NUMBER_OF_PARTITIONS_LEN;
+      set_htonll(ll, 17);
+      outdata = ll;
+      break;
+    case RIAP_CLOCK:
+      /*FIXME: gettime + saved offset*/
+      outlen = RIAP_CLOCK_LEN;
+      set_htonl(ll, 0);
+      outdata = ll;
+      break;
+    case RIAP_OSD_NAME:
+      page = ROOT_INFO_PG;
+      return _attr_get_attr(ohandle, pid, oid, page,
+          number, outlen, outdata,
+          listfmt, used_outlen);
+    default:
+      return OSD_ERROR;
+  }
+
+  return OSD_OK;
+}
 
 /*
  * get one attribute in list format.
@@ -471,12 +619,13 @@ out_reset:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_attr(struct db_context *dbc, uint64_t pid, uint64_t oid,
+int _attr_get_attr(void *ohandle, uint64_t pid, uint64_t oid,
 		  uint32_t page, uint32_t number, uint64_t outlen,
 		  void *outdata, uint8_t listfmt, uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->getattr);
 
@@ -509,12 +658,13 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_val(struct db_context *dbc, uint64_t pid, uint64_t oid,
+int attr_get_val(void *ohandle, uint64_t pid, uint64_t oid,
 		 uint32_t page, uint32_t number, uint64_t outlen,
 		 void *outdata, uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->getval);
 
@@ -549,12 +699,13 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_page_as_list(struct db_context *dbc, uint64_t pid, uint64_t oid,
+int attr_get_page_as_list(void *ohandle, uint64_t pid, uint64_t oid,
 			  uint32_t page, uint64_t outlen, void *outdata,
 			  uint8_t listfmt, uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->pgaslst);
 
@@ -589,12 +740,13 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_for_all_pages(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int attr_get_for_all_pages(void *ohandle, uint64_t pid, uint64_t oid, 
 			   uint32_t number, uint64_t outlen, void *outdata,
 			   uint8_t listfmt, uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->forallpg);
 
@@ -630,12 +782,13 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_all_attrs(struct db_context *dbc, uint64_t pid, uint64_t oid,
+int attr_get_all_attrs(void *ohandle, uint64_t pid, uint64_t oid,
 		       uint64_t outlen, void *outdata, uint8_t listfmt, 
 		       uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->getall);
 
@@ -667,12 +820,13 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success, used_outlen modified
  */
-int attr_get_dir_page(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int attr_get_dir_page(void *ohandle, uint64_t pid, uint64_t oid, 
 		      uint32_t page, uint64_t outlen, void *outdata,
 		      uint8_t listfmt, uint32_t *used_outlen)
 {
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 
 	assert(dbc && dbc->db && dbc->attr && dbc->attr->dirpage);
 

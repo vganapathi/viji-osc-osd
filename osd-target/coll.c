@@ -56,11 +56,12 @@ struct coll_tab {
  * -EIO: if any prepare statement fails
  *  OSD_OK: success
  */
-int coll_initialize(struct db_context *dbc)
+int coll_initialize(void *db)
 {
 	int ret = 0;
 	int sqlret = 0;
 	char SQL[MAXSQLEN];
+  struct db_context *dbc = (struct db_context *)db;
 
 	if (dbc == NULL || dbc->db == NULL) {
 		ret = -EINVAL;
@@ -167,8 +168,9 @@ out:
 }
 
 
-int coll_finalize(struct db_context *dbc)
+int coll_finalize(void *db)
 {
+  struct db_context *dbc = (struct db_context *)db;
 	if (!dbc || !dbc->coll)
 		return OSD_ERROR;
 
@@ -189,8 +191,9 @@ int coll_finalize(struct db_context *dbc)
 }
 
 
-const char *coll_getname(struct db_context *dbc)
+const char *coll_getname(void *ohandle)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	if (dbc == NULL || dbc->coll == NULL)
 		return NULL;
 	return dbc->coll->name;
@@ -208,9 +211,10 @@ const char *coll_getname(struct db_context *dbc)
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int coll_insert(struct db_context *dbc, uint64_t pid, uint64_t cid,
+int coll_insert(void *ohandle, uint64_t pid, uint64_t cid,
 		uint64_t oid, uint32_t number)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->coll && dbc->coll->insert);
@@ -238,9 +242,10 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int coll_copyoids(struct db_context *dbc, uint64_t pid, uint64_t dest_cid,
+int coll_copyoids(void *ohandle, uint64_t pid, uint64_t dest_cid,
 		  uint64_t source_cid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->coll && dbc->coll->copyoids);
@@ -265,9 +270,10 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int coll_delete(struct db_context *dbc, uint64_t pid, uint64_t cid, 
+int coll_delete(void *ohandle, uint64_t pid, uint64_t cid, 
 		uint64_t oid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->coll && dbc->coll->delete);
@@ -291,8 +297,9 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int coll_delete_cid(struct db_context *dbc, uint64_t pid, uint64_t cid)
+int coll_delete_cid(void *ohandle, uint64_t pid, uint64_t cid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->coll && dbc->coll->delcid);
@@ -315,8 +322,9 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int coll_delete_oid(struct db_context *dbc, uint64_t pid, uint64_t oid)
+int coll_delete_oid(void *ohandle, uint64_t pid, uint64_t oid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->coll && dbc->coll->deloid);
@@ -343,9 +351,10 @@ repeat:
  * 	==1: if collection is empty or absent 
  * 	==0: if not empty
  */
-int coll_isempty_cid(struct db_context *dbc, uint64_t pid, uint64_t cid,
+int coll_isempty_cid(void *ohandle, uint64_t pid, uint64_t cid,
 		     int *isempty)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 	*isempty = 0;
@@ -381,9 +390,10 @@ out:
  * OSD_ERROR: in case of any error, cid is not set
  * OSD_OK: success, cid is set to proper collection id
  */
-int coll_get_cid(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int coll_get_cid(void *ohandle, uint64_t pid, uint64_t oid, 
 		 uint32_t number, uint64_t *cid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 
@@ -419,11 +429,12 @@ out:
  * OSD_ERROR: other errors
  * OSD_OK: success, oids copied into outbuf, cont_id set if necessary
  */
-int coll_get_oids_in_cid(struct db_context *dbc, uint64_t pid, uint64_t cid, 
+int coll_get_oids_in_cid(void *ohandle, uint64_t pid, uint64_t cid, 
 		       uint64_t initial_oid, uint64_t alloc_len, 
 		       uint8_t *outdata, uint64_t *used_outlen,
 		       uint64_t *add_len, uint64_t *cont_id)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	uint64_t len = 0;
 	sqlite3_stmt *stmt = NULL;

@@ -53,11 +53,12 @@ struct obj_tab {
  * -EIO: if any prepare statement fails
  *  OSD_OK: success
  */
-int obj_initialize(struct db_context *dbc)
+int obj_initialize(void *db)
 {
 	int ret = 0;
 	int sqlret = 0;
 	char SQL[MAXSQLEN];
+	struct db_context *dbc = (struct db_context*)db;
 
 	if (dbc == NULL || dbc->db == NULL) {
 		ret = -EINVAL;
@@ -189,8 +190,9 @@ out:
 }
 
 
-int obj_finalize(struct db_context *dbc)
+int obj_finalize(void *db)
 {
+	struct db_context *dbc = (struct db_context*)db;
 	if (!dbc || !dbc->obj)
 		return OSD_ERROR;
 
@@ -214,8 +216,9 @@ int obj_finalize(struct db_context *dbc)
 }
 
 
-const char *obj_getname(struct db_context *dbc)
+const char *obj_getname(void *ohandle)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	if (dbc == NULL || dbc->obj == NULL)
 		return NULL;
 	return dbc->obj->name;
@@ -228,9 +231,10 @@ const char *obj_getname(struct db_context *dbc)
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_insert(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int obj_insert(void *ohandle, uint64_t pid, uint64_t oid, 
 	       uint32_t type)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	TICK_TRACE(obj_insert);
@@ -258,8 +262,9 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_delete(struct db_context *dbc, uint64_t pid, uint64_t oid)
+int obj_delete(void *ohandle, uint64_t pid, uint64_t oid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->obj && dbc->obj->delete);
@@ -282,8 +287,9 @@ repeat:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_delete_pid(struct db_context *dbc, uint64_t pid)
+int obj_delete_pid(void *ohandle, uint64_t pid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->obj && dbc->obj->delpid);
@@ -306,8 +312,9 @@ repeat:
  * 	oid = next oid if pid has some oids
  * 	oid = 1 if pid was empty or absent. caller must assign correct oid.
  */
-int obj_get_nextoid(struct db_context *dbc, uint64_t pid, uint64_t *oid)
+int obj_get_nextoid(void *ohandle, uint64_t pid, uint64_t *oid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 
@@ -342,8 +349,9 @@ out:
  * 	pid = next pid if OSD has some pids
  * 	pid = 1 if pid not in db. caller must assign correct pid.
  */
-int obj_get_nextpid(struct db_context *dbc, uint64_t *pid)
+int obj_get_nextpid(void *ohandle, uint64_t *pid)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->obj && dbc->obj->nextpid);
@@ -373,9 +381,10 @@ out:
  * 	0: object is absent
  * 	1: object is present
  */
-int obj_ispresent(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int obj_ispresent(void *ohandle, char *root, uint64_t pid, uint64_t oid, 
 		  int *present)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 	*present = 0;
@@ -415,8 +424,9 @@ out:
  * 	==1: if partition is empty or absent or in case of sqlite error
  * 	==0: if partition is not empty
  */
-int obj_isempty_pid(struct db_context *dbc, uint64_t pid, int *isempty)
+int obj_isempty_pid(void *ohandle, char *root, uint64_t pid, int *isempty)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 	*isempty = 0;
@@ -453,9 +463,10 @@ out:
  * OSD_OK: success in determining the type, either valid or invalid. 
  * 	obj_types set to the determined type.
  */
-int obj_get_type(struct db_context *dbc, uint64_t pid, uint64_t oid, 
+int obj_get_type(void *ohandle, uint64_t pid, uint64_t oid, 
 		 uint8_t *obj_type)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	int bound = 0;
 	*obj_type = ILLEGAL_OBJ;
@@ -496,11 +507,12 @@ out:
  * OSD_OK: success. oids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_oids_in_pid(struct db_context *dbc, uint64_t pid, 
+int obj_get_oids_in_pid(void *ohandle, uint64_t pid, 
 			uint64_t initial_oid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
 
@@ -527,11 +539,12 @@ repeat:
  * OSD_OK: success. cids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_cids_in_pid(struct db_context *dbc, uint64_t pid, 
+int obj_get_cids_in_pid(void *ohandle, uint64_t pid, 
 			uint64_t initial_cid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 	sqlite3_stmt *stmt = NULL;
 
@@ -558,11 +571,12 @@ repeat:
  * OSD_OK: success. pids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_all_pids(struct db_context *dbc, uint64_t initial_pid, 
+int obj_get_all_pids(void *ohandle, uint64_t initial_pid, 
 		     uint64_t alloc_len, uint8_t *outdata,
 		     uint64_t *used_outlen, uint64_t *add_len,
 		     uint64_t *cont_id)
 {
+  struct db_context *dbc = ((struct handle*)ohandle)->dbc;
 	int ret = 0;
 
 	assert(dbc && dbc->db && dbc->obj && dbc->obj->getpids);

@@ -22,37 +22,37 @@
 #include "osd-types.h"
 
 
-int coll_initialize(void *handle);
+int coll_initialize(void *ohandle);
 
-int coll_finalize(void *handle);
+int coll_finalize(void *ohandle);
 
-const char *coll_getname(void *handle);
+const char *coll_getname(void *ohandle);
 
-int coll_insert(void *handle, uint64_t pid, uint64_t cid,
+int coll_insert(void *ohandle, uint64_t pid, uint64_t cid,
 		uint64_t oid, uint32_t number);
 
-int coll_delete(void *handle, uint64_t pid, uint64_t cid, 
+int coll_delete(void *ohandle, uint64_t pid, uint64_t cid, 
 		uint64_t oid);
 
-int coll_delete_cid(void *handle, uint64_t pid, uint64_t cid);
+int coll_delete_cid(void *ohandle, uint64_t pid, uint64_t cid);
 
-int coll_delete_oid(void *handle, uint64_t pid, uint64_t oid);
+int coll_delete_oid(void *ohandle, uint64_t pid, uint64_t oid);
 
-int coll_isempty_cid(void *handle, uint64_t pid, uint64_t cid,
+int coll_isempty_cid(void *ohandle, uint64_t pid, uint64_t cid,
 		     int *isempty);
 
-int coll_get_cid(void *handle, uint64_t pid, uint64_t oid, 
+int coll_get_cid(void *ohandle, uint64_t pid, uint64_t oid, 
 		 uint32_t number, uint64_t *cid);
 
 int coll_get_cap(sqlite3 *db, uint64_t pid, uint64_t oid, void *outbuf, 
 		 uint64_t outlen, uint8_t listfmt, uint32_t *used_outlen);
 
-int coll_get_oids_in_cid(void *handle, uint64_t pid, uint64_t cid, 
+int coll_get_oids_in_cid(void *ohandle, uint64_t pid, uint64_t cid, 
 			 uint64_t initial_oid, uint64_t alloc_len, 
 			 uint8_t *outdata, uint64_t *used_outlen,
 			 uint64_t *add_len, uint64_t *cont_id);
 
-int coll_copyoids(void *handle, uint64_t pid, uint64_t dest_cid,
+int coll_copyoids(void *ohandle, uint64_t pid, uint64_t dest_cid,
 		  uint64_t source_cid);
 
 #endif /* __COLL_H */

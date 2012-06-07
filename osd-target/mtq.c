@@ -44,7 +44,7 @@
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int mtq_run_query(struct db_context *dbc, uint64_t pid, uint64_t cid, 
+int mtq_run_query(void *ohandle, uint64_t pid, uint64_t cid, 
 		  struct query_criteria *qc, void *outdata, 
 		  uint32_t alloc_len, uint64_t *used_outlen)
 {
@@ -60,6 +60,7 @@ int mtq_run_query(struct db_context *dbc, uint64_t pid, uint64_t cid,
 	const char *op = NULL;
 	sqlite3_stmt *stmt = NULL;
 	char select_stmt[MAXSQLEN];
+  struct db_context *dbc = ((struct handle *)ohandle)->dbc;
 	const char *coll = coll_getname(dbc);
 	const char *attr = attr_getname(dbc);
 
@@ -209,7 +210,7 @@ out:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int mtq_list_oids_attr(struct db_context *dbc, uint64_t pid,
+int mtq_list_oids_attr(void *ohandle, uint64_t pid,
 		       uint64_t initial_oid, struct getattr_list *get_attr,
 		       uint64_t alloc_len, void *outdata, 
 		       uint64_t *used_outlen, uint64_t *add_len, 
@@ -230,6 +231,7 @@ int mtq_list_oids_attr(struct db_context *dbc, uint64_t pid,
 	sqlite3_stmt *stmt = NULL;
 	uint8_t *head = NULL, *tail = NULL;
 	const char *select_stmt = NULL;
+  struct db_context *dbc = ((struct handle *)ohandle)->dbc;
 	const char *obj = obj_getname(dbc);
 	const char *attr = attr_getname(dbc);
 
@@ -432,7 +434,7 @@ out:
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int mtq_set_member_attrs(struct db_context *dbc, uint64_t pid, uint64_t cid, 
+int mtq_set_member_attrs(void *ohandle, uint64_t pid, uint64_t cid, 
 			 struct setattr_list *set_attr)
 {
 	int ret = 0;
@@ -442,6 +444,7 @@ int mtq_set_member_attrs(struct db_context *dbc, uint64_t pid, uint64_t cid,
 	char *SQL = NULL;
 	size_t sqlen = 0;
 	sqlite3_stmt *stmt = NULL;
+  struct db_context *dbc = ((struct handle *)ohandle)->dbc;
 	const char *coll = coll_getname(dbc);
 	const char *attr = attr_getname(dbc);
 
