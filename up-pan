@@ -58,7 +58,10 @@ echo "================ `date` =========================" >> $LOG
 # -d - debug level
 # DEBUG="-d 9"
 #set DEBUG ""
-$OTGTD  --iscsi portal=:3251 -f >>& $LOG  &
+
+#target daemon is defined as a module in monitor2.conf
+#$OTGTD  --iscsi portal=:3251 -f >>& $LOG  &
+/pan/bin/startmodule osc_osd_target
 
 sleep 2
 
