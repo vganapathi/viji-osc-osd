@@ -45,6 +45,12 @@ int vec_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		     uint64_t len, uint64_t offset, const uint8_t *dinbuf,
 		     uint8_t *sense);
 
+int setup_root_paths (const char* root, struct osd_device *osd);
+
+int osd_create_datafile(struct osd_device *osd, uint64_t pid, uint64_t oid); 
+
+int format_osd(struct osd_device *osd, uint64_t capacity, uint32_t cdb_cont_len, uint8_t *sense);
+
 
 
 #endif /* __IO_H */

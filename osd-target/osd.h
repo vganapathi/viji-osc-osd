@@ -143,6 +143,10 @@ int osd_gen_cas(struct osd_device *osd, uint64_t pid, uint64_t oid,
 		uint16_t cmp_len, const uint8_t *swap, uint16_t swap_len,
 		uint8_t **orig_val, uint16_t *orig_len, uint8_t *sense);
 
+int create_dir(const char *dirname);
+int osd_initialize_db(struct osd_device *osd);
+int empty_dir(const char *dirname);
+
 /* helper functions */
 static inline void get_dfile_name(char *path, const char *root,
 				  uint64_t pid, uint64_t oid)
@@ -197,5 +201,11 @@ static inline void fill_ccap(struct cur_cmd_attr_pg *ccap, uint8_t *ricv,
 	ccap->oid = oid;
 	ccap->append_off = append_off;
 }
+
+static inline void get_dbname(char *path, const char *root)
+{
+	sprintf(path, "%s/%s/%s", root, md, dbname);
+}
+
 
 #endif /* __OSD_H */

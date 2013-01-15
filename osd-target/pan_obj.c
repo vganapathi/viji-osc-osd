@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
 #include <pan/osdfs/osd_ioctl.h>
@@ -36,7 +37,7 @@
 #endif
 
 /* obj table tracks the presence of objects in the OSD */
-
+#if 0
 static const char *obj_tab_name = "obj";
 struct obj_tab {
 	char *name;             /* name of the table */
@@ -52,7 +53,7 @@ struct obj_tab {
 	sqlite3_stmt *getcids;  /* get cids in pid */
 	sqlite3_stmt *getpids;  /* get pids in db */
 };
-
+#endif
 
 /*
  * returns:
@@ -61,14 +62,14 @@ struct obj_tab {
  * -EIO: if any prepare statement fails
  *  OSD_OK: success
  */
-int obj_initialize(struct handle* ohandle)
+int obj_initialize(void* dbc)
 {
   osd_debug("%s: \n", __func__);
   return 0;
 }
 
 
-int obj_finalize(struct handle* ohandle)
+int obj_finalize(void* ohandle)
 {
   
   osd_debug("%s: \n", __func__);
@@ -76,7 +77,7 @@ int obj_finalize(struct handle* ohandle)
 }
 
 
-const char *obj_getname(struct handle* ohandle)
+const char *obj_getname(void* ohandle)
 {
 	return "pan_obj_name";
 }
@@ -88,23 +89,24 @@ const char *obj_getname(struct handle* ohandle)
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_insert(struct handle* handle, uint64_t pid, uint64_t oid, 
+int obj_insert(void* handle, uint64_t pid, uint64_t oid, 
 	       uint32_t type)
 {
 
   int ret = 0;
+  struct handle* ohandle = handle;
 
-  osd_debug("%s: fd %d pid %llu oid %llu \n", __func__, handle->fd, llu(pid), llu(oid));
+  osd_debug("%s: fd %d pid %llu oid %llu \n", __func__, ohandle->fd, llu(pid), llu(oid));
 
   if(oid){
     struct osd_ioctl_createobject iocco;
     iocco.group = pid;
     iocco.object = oid;
-    ret = ioctl(handle->fd, OSD_IOCMD_CREATEOBJECT, &iocco);
+    ret = ioctl(ohandle->fd, OSD_IOCMD_CREATEOBJECT, &iocco);
   } else {
     struct osd_ioctl_createobjectgroup ioccog;
     ioccog.group = pid;
-    ret = ioctl(handle->fd, OSD_IOCMD_CREATEOBJECTGROUP, &ioccog);
+    ret = ioctl(ohandle->fd, OSD_IOCMD_CREATEOBJECTGROUP, &ioccog);
   }
 	if (ret < 0) {
 		osd_error("%s: create obj failed err %s\n", __func__, strerror(errno));
@@ -122,7 +124,7 @@ int obj_insert(struct handle* handle, uint64_t pid, uint64_t oid,
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_delete(struct handle* handle, uint64_t pid, uint64_t oid)
+int obj_delete(void* handle, uint64_t pid, uint64_t oid)
 {
   int ret = 0;
 
@@ -135,12 +137,12 @@ int obj_delete(struct handle* handle, uint64_t pid, uint64_t oid)
     iocro.cdb_flags = 0;
     iocro.capacity_remaining = 0;
     iocro.capacity_freed = 0;
-    ret = ioctl(handle->fd, OSD_IOCMD_REMOVEOBJECT, &iocro);
+    ret = ioctl(((struct handle*)handle)->fd, OSD_IOCMD_REMOVEOBJECT, &iocro);
   } else {
     struct osd_ioctl_removeobjectgroup iocrog;
     iocrog.group = pid;
     iocrog.cdb_flags = OSD_REMOVE_NONEMPTY;
-    ret = ioctl(handle->fd, OSD_IOCMD_REMOVEOBJECTGROUP, &iocrog);
+    ret = ioctl(((struct handle*)handle)->fd, OSD_IOCMD_REMOVEOBJECTGROUP, &iocrog);
   }
 	if (ret < 0) {
 		osd_error("%s: delete obj failed err %d %s\n", __func__, ret, strerror(errno));
@@ -156,7 +158,7 @@ int obj_delete(struct handle* handle, uint64_t pid, uint64_t oid)
  * OSD_ERROR: some other error
  * OSD_OK: success
  */
-int obj_delete_pid(struct handle* ohandle, uint64_t pid)
+int obj_delete_pid(void* ohandle, uint64_t pid)
 {
   osd_debug("%s: \n", __func__);
   return 0;
@@ -171,7 +173,7 @@ int obj_delete_pid(struct handle* ohandle, uint64_t pid)
  * 	oid = next oid if pid has some oids
  * 	oid = 1 if pid was empty or absent. caller must assign correct oid.
  */
-int obj_get_nextoid(struct handle* ohandle, uint64_t pid, uint64_t *oid)
+int obj_get_nextoid(void* ohandle, uint64_t pid, uint64_t *oid)
 {
   osd_debug("%s: \n", __func__);
   return 0;
@@ -186,7 +188,7 @@ int obj_get_nextoid(struct handle* ohandle, uint64_t pid, uint64_t *oid)
  * 	pid = next pid if OSD has some pids
  * 	pid = 1 if pid not in db. caller must assign correct pid.
  */
-int obj_get_nextpid(struct handle* ohandle, uint64_t *pid)
+int obj_get_nextpid(void* ohandle, uint64_t *pid)
 {
   osd_debug("%s: \n", __func__);
   return 0;
@@ -204,28 +206,32 @@ int obj_get_nextpid(struct handle* ohandle, uint64_t *pid)
  * 	0: object is absent
  * 	1: object is present
  */
-int obj_ispresent(struct handle* ohandle, uint64_t pid, uint64_t oid, 
+int obj_ispresent(void* ohandle, char *root, uint64_t pid, uint64_t oid, 
 		  int *present)
 {
   struct stat sobj;
   char path[MAXPATHLEN];
 
 
+  get_dfile_name(path, root, pid, oid);
+#if 0
   if(oid)
     sprintf(path, "/pandata/%llu/%llu", llu(pid), llu(oid));
   else
     sprintf(path, "/pandata/%llu", llu(pid));
+#endif
 
-  osd_debug("%s: path %s\n", __func__, path);
+  osd_debug("%s: path %s", __func__, path);
 
-  if(stat(path, &sobj) != 0){
+  if(!pid && !oid){
+      *present = 1;
+  }else if(stat(path, &sobj) != 0){
     osd_debug("%s: pid %llu oid %llu does not exist!", __func__, llu(pid), llu(oid));
     *present = 0;
   }else{
     osd_debug("%s: pid %llu oid %llu exists!", __func__, llu(pid), llu(oid));
     *present = 1;
   }
-  
   return 0;
 }
 
@@ -240,7 +246,7 @@ int obj_ispresent(struct handle* ohandle, uint64_t pid, uint64_t oid,
  * 	==1: if partition is empty or absent or in case of sqlite error
  * 	==0: if partition is not empty
  */
-int obj_isempty_pid(struct handle* ohandle, uint64_t pid, int *isempty)
+int obj_isempty_pid(void* ohandle, char* root, uint64_t pid, int *isempty)
 {
   osd_debug("%s: pid %llu ", __func__, llu(pid));
 
@@ -250,7 +256,8 @@ int obj_isempty_pid(struct handle* ohandle, uint64_t pid, int *isempty)
 	struct dirent *ent = NULL;
   *isempty = 0;
 
-  sprintf(path, "/pandata/%llu", llu(pid)); 
+  get_dfile_name(path, root,  pid, 0);
+  //sprintf(path, "/pandata/%llu", llu(pid)); 
   osd_debug("%s: path %s", __func__, path);
 
   if((dir = opendir(path)) == NULL){
@@ -277,10 +284,18 @@ int obj_isempty_pid(struct handle* ohandle, uint64_t pid, int *isempty)
  * OSD_OK: success in determining the type, either valid or invalid. 
  * 	obj_types set to the determined type.
  */
-int obj_get_type(struct handle* ohandle, uint64_t pid, uint64_t oid, 
+int obj_get_type(void* ohandle, uint64_t pid, uint64_t oid, 
 		 uint8_t *obj_type)
 {
-  osd_debug("%s: \n", __func__);
+  *obj_type = ILLEGAL_OBJ;
+  if(pid == 0 && oid == 0) {
+      *obj_type = ROOT;
+  }else if(pid > 0 && oid == 0){
+      *obj_type = PARTITION;
+  }else if(pid > 0 && oid > 0){
+      *obj_type = USEROBJECT;
+  }
+  osd_debug("%s: type is %d\n", __func__, *obj_type);
   return 0;
 }
 
@@ -292,7 +307,7 @@ int obj_get_type(struct handle* ohandle, uint64_t pid, uint64_t oid,
  * OSD_OK: success. oids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_oids_in_pid(struct handle* ohandle, uint64_t pid, 
+int obj_get_oids_in_pid(void* ohandle, uint64_t pid, 
 			uint64_t initial_oid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id)
@@ -309,7 +324,7 @@ int obj_get_oids_in_pid(struct handle* ohandle, uint64_t pid,
  * OSD_OK: success. cids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_cids_in_pid(struct handle* ohandle, uint64_t pid, 
+int obj_get_cids_in_pid(void* ohandle, uint64_t pid, 
 			uint64_t initial_cid, uint64_t alloc_len, 
 			uint8_t *outdata, uint64_t *used_outlen, 
 			uint64_t *add_len, uint64_t *cont_id)
@@ -326,7 +341,7 @@ int obj_get_cids_in_pid(struct handle* ohandle, uint64_t pid,
  * OSD_OK: success. pids copied into outdata, contid, used_outlen and 
  * 	add_len are set accordingly
  */
-int obj_get_all_pids(struct handle* ohandle, uint64_t initial_pid, 
+int obj_get_all_pids(void* ohandle, uint64_t initial_pid, 
 		     uint64_t alloc_len, uint8_t *outdata,
 		     uint64_t *used_outlen, uint64_t *add_len,
 		     uint64_t *cont_id)

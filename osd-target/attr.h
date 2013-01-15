@@ -26,8 +26,11 @@ int attr_finalize(void *dbc);
 
 const char *attr_getname(void *o_handle);
 
-int attr_set_attr(void *o_handle, uint64_t pid, uint64_t oid, 
-		  uint32_t number, const void *val, uint16_t len);
+int attr_set_conversion(void* o_handle, uint64_t pid, uint64_t oid, 
+    uint32_t page, uint32_t number, const void *val, uint16_t len);
+
+int attr_set_attr(struct osd_device *osd, uint64_t pid, uint64_t oid, 
+		  uint32_t page, uint32_t number, const void *val, uint16_t len);
 
 int _attr_set_attr(void* o_handle, uint64_t pid, uint64_t oid, 
     uint32_t page, uint32_t number, const void *val, uint16_t len);
@@ -37,11 +40,16 @@ int attr_delete_attr(void *o_handle, uint64_t pid, uint64_t oid,
 
 int attr_delete_all(void *o_handle, uint64_t pid, uint64_t oid);
 
-int attr_get_attr(void *o_handle, uint64_t pid, uint64_t oid,
-		  uint32_t number, uint64_t outlen, void *outdata, uint8_t listfmt, 
-      uint32_t *used_outlen);
+int attr_get_conversion(void *o_handle, uint64_t pid, uint64_t oid, uint32_t page,
+		  uint32_t number, uint64_t outlen, void *outdata, uint8_t listfmt,
+                  uint32_t *used_outlen);
+
+int attr_get_attr(struct osd_device *osd, uint64_t pid, uint64_t oid, uint32_t page,
+		  uint32_t number, uint64_t outlen, void *outdata, uint8_t listfmt,
+                  uint32_t *used_outlen);
 
 int _attr_get_attr(void *o_handle, uint64_t pid, uint64_t oid,
+		  uint32_t orig_page, uint32_t orig_number,
 		  uint32_t page, uint32_t number, uint64_t outlen,
 		  void *outdata, uint8_t listfmt, uint32_t *used_outlen);
 

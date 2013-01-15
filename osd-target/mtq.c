@@ -60,7 +60,7 @@ int mtq_run_query(void *ohandle, uint64_t pid, uint64_t cid,
 	const char *op = NULL;
 	sqlite3_stmt *stmt = NULL;
 	char select_stmt[MAXSQLEN];
-  struct db_context *dbc = ((struct handle *)ohandle)->dbc;
+        struct db_context *dbc = ((struct handle *)ohandle)->dbc;
 	const char *coll = coll_getname(dbc);
 	const char *attr = attr_getname(dbc);
 

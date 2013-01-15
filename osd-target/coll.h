@@ -18,7 +18,6 @@
 #ifndef __COLL_H
 #define __COLL_H
 
-#include <sqlite3.h>
 #include "osd-types.h"
 
 
@@ -44,7 +43,7 @@ int coll_isempty_cid(void *ohandle, uint64_t pid, uint64_t cid,
 int coll_get_cid(void *ohandle, uint64_t pid, uint64_t oid, 
 		 uint32_t number, uint64_t *cid);
 
-int coll_get_cap(sqlite3 *db, uint64_t pid, uint64_t oid, void *outbuf, 
+int coll_get_cap(void *ohandle, uint64_t pid, uint64_t oid, void *outbuf, 
 		 uint64_t outlen, uint8_t listfmt, uint32_t *used_outlen);
 
 int coll_get_oids_in_cid(void *ohandle, uint64_t pid, uint64_t cid, 

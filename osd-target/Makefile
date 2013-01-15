@@ -5,7 +5,7 @@
 -include ../Makedefs
 
 ifeq ($(PANASAS_OSD),1)
-SRC := pan_attr.c pan_obj.c osd.c pan_io.c cdb.c osd-sense.c list-entry.c
+SRC := pan_coll.c pan_mtq.c pan_attr.c pan_obj.c osd.c pan_io.c cdb.c osd-sense.c list-entry.c
 INC := attr.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h
 else
 SRC := attr.c db.c obj.c osd-schema.c osd.c io.c cdb.c osd-sense.c list-entry.c
@@ -55,7 +55,7 @@ COPTS += -fPIC -foptimize-sibling-calls -D_GNU_SOURCE
 CWARN := -Wall -W -Wpointer-arith -Wwrite-strings -Wcast-align -Wcast-qual \
 	-Wbad-function-cast -Wundef -Wmissing-prototypes \
 	-Wmissing-declarations -Wnested-externs -Werror
-CFLAGS += $(COPTS) $(CWARN) -I.. -Wno-unused -I../osd-util
+CFLAGS += -g $(COPTS) $(CWARN) -I.. -Wno-unused -I../osd-util
 
 ifeq ($(PVFS_OSD_INTEGRATED),1)
 CFLAGS += -DPVFS_OSD_INTEGRATED

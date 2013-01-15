@@ -17,7 +17,6 @@
  */
 #include <stdlib.h>
 #include <stdio.h>
-#include <sqlite3.h>
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
@@ -34,6 +33,7 @@
  * which an object belongs can be computed efficiently.
  */
 
+#if 0
 static const char *coll_tab_name = "coll";
 struct coll_tab {
 	char *name;             /* name of the table */
@@ -46,7 +46,7 @@ struct coll_tab {
 	sqlite3_stmt *getoids;  /* get objects in a collection */
 	sqlite3_stmt *copyoids; /* copy oids from one collection to another */
 };
-
+#endif
 
 /*
  * returns:
@@ -203,10 +203,10 @@ int coll_get_oids_in_cid(void *handle, uint64_t pid, uint64_t cid,
  * Collection Attributes Page (CAP) of a userobject stores its membership in 
  * collections osd2r01 Sec 7.1.2.19.
  */
-int coll_get_cap(sqlite3 *db, uint64_t pid, uint64_t oid, void *outbuf, 
+int coll_get_cap(void *handle, uint64_t pid, uint64_t oid, void *outbuf, 
 		 uint64_t outlen, uint8_t listfmt, uint32_t *used_outlen)
 {
   osd_debug("%s: ", __func__);
-	return OSD_ERROR;
+  return OSD_ERROR;
 }
 

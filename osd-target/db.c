@@ -157,7 +157,7 @@ int osd_db_close(struct osd_device *osd)
 {
 	int ret = 0;
 
-	assert(osd && osd->handle->dbc && osd->dbc->db);
+	assert(osd && osd->handle->dbc && osd->handle->dbc->db);
 
 	db_finalize(osd->handle->dbc);
 	sqlite3_close(osd->handle->dbc->db);

@@ -459,7 +459,7 @@ repeat:
  * Collection Attributes Page (CAP) of a userobject stores its membership in 
  * collections osd2r01 Sec 7.1.2.19.
  */
-int coll_get_cap(sqlite3 *db, uint64_t pid, uint64_t oid, void *outbuf, 
+int coll_get_cap(void *ohandle, uint64_t pid, uint64_t oid, void *outbuf, 
 		 uint64_t outlen, uint8_t listfmt, uint32_t *used_outlen)
 {
 	return OSD_ERROR;
