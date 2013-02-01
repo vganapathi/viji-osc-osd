@@ -44,8 +44,13 @@ endif
 endif
 
 
-LIBS += -lm -lcrypto -lsqlite3 -laio -lavahi-core -lavahi-common \
+LIBS += -lm -lcrypto -laio -lavahi-core -lavahi-common \
 	$(IB_HW_OF_LIBS) -libverbs -lrdmacm
+
+ifneq ($(PANASAS_OSD),1)
+LIBS += -lsqlite3
+endif
+
 
 CC := gcc
 CPP_M := -MM
