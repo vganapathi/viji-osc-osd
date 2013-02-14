@@ -146,25 +146,7 @@ int _attr_set_attr(void* ohandle, uint64_t pid, uint64_t oid,
     struct handle* o_handle = ohandle;
     osd_debug("%s: page %llu num %llu pid %llu oid %llu val %p", 
             __func__, llu(page), llu(number), llu(pid), llu(oid), val); 
-#if 0
-    struct osd_attr_t attr;
 
-    memset(&attr, 0, sizeof(attr));
-    attr.page = page;
-    attr.attr = number;
-    attr.length = len;
-
-    if (val) {
-        memcpy(attr.value, val, attr.length);
-    }
-
-    int rc = syscall(SYS_setosdattr, o_handle->fd, &attr);
-    if (rc) {
-        osd_error("%s: Error in SYS_setosdattr: "
-                "%s", __func__, strerror(errno));
-        return 1;
-    }
-#endif
     int ret = 0;
     // Format = num attrs + (page, attr) +  length + data
     int tlen = sizeof(uint32_t) + len + (2* sizeof(uint16_t))
@@ -181,14 +163,18 @@ int _attr_set_attr(void* ohandle, uint64_t pid, uint64_t oid,
     p += sizeof(uint16_t);
     memcpy(p, val, len);
 
-    struct osd_ioctl_setattribute iocsa;
+    struct osd_ioctl_setgetattribute iocsa;
 
-    bzero(&iocsa, sizeof(struct osd_ioctl_setattribute));
+    bzero(&iocsa, sizeof(struct osd_ioctl_setgetattribute));
+    iocsa.hdr.cdb_flags = 0;
     iocsa.group = pid;
     iocsa.object = oid;
-    iocsa.cdb_flags = 0;
-    iocsa.setattr_length = tlen;
-    iocsa.setattr = (char*)tmp;
+
+    struct osd_ioctl_attrs tmpattrs;
+    bzero(&tmpattrs, sizeof(tmpattrs));
+    tmpattrs.setattr_length = tlen;
+    tmpattrs.setattr = (char *)tmp;;
+    iocsa.attr = &tmpattrs; 
 
     ret = ioctl(o_handle->fd, OSD_IOCMD_SETATTRIBUTE, &iocsa);
     if (ret < 0) {
@@ -343,24 +329,6 @@ if (orig_page == USER_INFO_PG) {
         case RIAP_PRODUCT_SERIAL_NUMBER:
             page = GET_ATTRIBUTE_PAGE(ATTR_DEVICE_SerialNumber);
             id = GET_ATTRIBUTE_ID(ATTR_DEVICE_SerialNumber);
-
-#if 0
-            FILE *stream;
-
-            stream = fopen("/tmp/datasn", "rw");
-            if (!stream){
-                osd_debug("%s: fopen failed! %d ", __func__, errno);
-                goto pan_default;
-            }
-            system("getdevinfo -q datasn > /tmp/datasn");
-            //fgets(line, len, stdin);
-            ////system("rm -rf /tmp/datasn");
-            fscanf(stream, "%s", line);
-            osd_debug("%s: system sn: val %s", __func__, line);
-            val = line;
-            len = sizeof(line);
-            goto done;
-#endif
             goto pan_default;
 
         case RIAP_TOTAL_CAPACITY:
@@ -368,44 +336,22 @@ if (orig_page == USER_INFO_PG) {
             id = GET_ATTRIBUTE_ID(ATTR_DEVICE_TotalCapacity);
             goto get_attr;
 
-#if 0
-        case RIAP_USED_CAPACITY:
-            len = RIAP_USED_CAPACITY_LEN;
-            get_dfile_name(path, osd->root, pid, oid);
-            if (!oid) {
-                ret = statfs(path, &sfs);
-                if (ret != 0)
-                    return OSD_ERROR;
-
-                sz = (sfs.f_blocks - sfs.f_bfree) * BLOCK_SZ;
-            } else {
-                ret = stat(path, &sb);
-                if (ret != 0)
-                    return OSD_ERROR;
-
-                sz = sb.st_blocks*BLOCK_SZ;
-            }
-            set_htonll(ll, sz);
-            val = ll;
-            goto done;
-#endif
         case RIAP_USED_CAPACITY:
             /*FIXME: return used capacity of osd->root device*/
-            osd_error("%s: WANT USED CAPACITY!!", __func__);
             page = GET_ATTRIBUTE_PAGE(ATTR_DEVICE_TotalCapacity);
             id = GET_ATTRIBUTE_ID(ATTR_DEVICE_TotalCapacity);
             ret = _attr_get_attr(osd->handle, pid, oid, page, id, page,
                     id, outlen, outdata, 0, used_outlen);
             //temp = &outdata[LE_VAL_OFF];
             int total_cap = *((int *)outdata);
-            osd_error("%s: TotalCapacity outdata %s cap %d page %u num %u", __func__, (char *)outdata, total_cap, page, id);
+            osd_debug("%s: TotalCapacity outdata %s cap %d page %u num %u", __func__, (char *)outdata, total_cap, page, id);
 
             page = GET_ATTRIBUTE_PAGE(ATTR_DEVICE_RemainingCapacity);
             id = GET_ATTRIBUTE_ID(ATTR_DEVICE_RemainingCapacity);
             ret = _attr_get_attr(osd->handle, pid, oid, page, id, page,
                     id, outlen, outdata, 0, used_outlen);
             total_cap -= *((int *)outdata);
-            osd_error("%s: Remain outdata %s cap %d page %u num %u", __func__, (char *)outdata, total_cap, page, id);
+            osd_debug("%s: Remain outdata %s cap %d page %u num %u", __func__, (char *)outdata, total_cap, page, id);
             set_htonll(ll, total_cap);
             val = ll;
             len = RIAP_USED_CAPACITY_LEN;
@@ -480,30 +426,6 @@ int _attr_get_attr(void* ohandle, uint64_t pid, uint64_t oid,
     osd_debug("+++++%s: outdata %s, outlen %llu, used_outlen %llu page %llu num %llu pid %llu oid %llu listfmt %llu",  
             __func__, (char *)outdata, llu(outlen), llu(*used_outlen), 
             llu(page), llu(number), llu(pid), llu(oid), llu(listfmt)); 
-#if 0
-    struct osd_attr_t attr;
-    memset(&attr, 0, sizeof(attr));
-    attr.page = page;
-    attr.attr = number;
-
-
-    int rc = syscall(SYS_getosdattr, o_handle->fd, &attr);
-    if (rc == -1) {
-        osd_error("%s: Error in SYS_getosdattr: "
-                "%s.\n", __func__, strerror(errno));
-        return 1;
-    }
-
-    osd_debug("++++++++%s: attr.val %p, attr.len %llu", __func__, attr.value, llu(attr.length));
-
-    if(listfmt == 0) {
-        //Don't format the values
-        outdata = attr.value;
-        return 0;
-    }
-
-    ret = le_pack_attr(outdata, outlen, page, number, attr.length, attr.value);
-#endif
 
     //num_attrs + id
     int tlen = sizeof(uint32_t) + sizeof(uint32_t);
@@ -517,16 +439,22 @@ int _attr_get_attr(void* ohandle, uint64_t pid, uint64_t oid,
 
     struct osd_attr_t out_attr;
 
-    struct osd_ioctl_getattribute iocga;
-    bzero(&iocga, sizeof(struct osd_ioctl_getattribute));
+    struct osd_ioctl_setgetattribute iocga;
+    bzero(&iocga, sizeof(struct osd_ioctl_setgetattribute));
     iocga.group = pid;
     iocga.object = oid;
-    iocga.cdb_flags = 0;
-    iocga.getattr_length = tlen;
-    iocga.getattr = (char*)tmp;
-    iocga.rval_length = sizeof(struct osd_attr_t);
-    iocga.rval = (char *)&out_attr;
+    iocga.hdr.cdb_flags = 0;
 
+    struct osd_ioctl_attrs tmpattrs;
+    bzero(&tmpattrs, sizeof(tmpattrs));
+    tmpattrs.getattr_length = tlen;
+    tmpattrs.getattr = (char *)tmp;;
+
+    iocga.attr = &tmpattrs; 
+    iocga.ret.rval_length = sizeof(struct osd_attr_t);
+    iocga.ret.rval = (char *)&out_attr;
+
+    osd_debug("%s: fd is %d", __func__, o_handle->fd);
     ret = ioctl(o_handle->fd, OSD_IOCMD_GETATTRIBUTE, &iocga);
     if (ret < 0) {
         osd_error("%s: getattr failed with %d %s", 
@@ -539,6 +467,7 @@ int _attr_get_attr(void* ohandle, uint64_t pid, uint64_t oid,
         //Don't format the values
         outdata = out_attr.value;
         outlen = out_attr.length;
+        osd_debug("%s: returning without formatting!", __func__);
         return 0;
     }
     ret = le_pack_attr(outdata, outlen, orig_page, orig_num, out_attr.length, out_attr.value);
@@ -701,12 +630,3 @@ int attr_set_conversion(void* ohandle, uint64_t pid, uint64_t oid,
 
     return _attr_set_attr(ohandle, pid, oid, page, number, val, len);
 }
-
-#if 0
-void attr_set_username(void *handle, uint64_t pid, uint64_t oid,
-                        const void*val, uint16_t len)
-{
-    _attr_set_attr(ohandle, pid, oid, page, number, val, len);
-    return;
-}
-#endif

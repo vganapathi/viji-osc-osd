@@ -37,7 +37,7 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     int ret, fd;
     char path[MAXNAMELEN];
     struct osd_ioctl_openclose ioco;
-    struct osd_ioctl_read iocr;
+    struct osd_ioctl_rw iocr;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu", __func__,
             llu(pid), llu(oid), llu(len), llu(offset));
@@ -48,21 +48,21 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     if (!(pid >= USEROBJECT_PID_LB && oid >= USEROBJECT_OID_LB))
         goto out_cdb_err;
 
-    bzero(&iocr, sizeof(struct osd_ioctl_read));
+    bzero(&iocr, sizeof(struct osd_ioctl_rw));
     iocr.group = pid;
     iocr.object = oid;
     iocr.offset = offset;
     iocr.length = len;
-    iocr.obj_data = (char *)outdata;
-    iocr.cdb_flags = 0;
+    iocr.ret.rval = (char *)outdata;
+    iocr.hdr.cdb_flags = 0;
 
     ret = ioctl(osd->handle->fd, OSD_IOCMD_READ, &iocr);
-    if ((ret < 0) || iocr.rval_length != len ) {
-        osd_error("%s: len %llu rval_len %llu", __FUNCTION__, llu(len), llu(iocr.rval_length));
+    if ((ret < 0) || iocr.ret.rval_length != len ) {
+        osd_error("%s: len %llu rval_len %llu", __FUNCTION__, llu(len), llu(iocr.ret.rval_length));
         goto out_hw_err;
     }
 
-    readlen = iocr.rval_length;
+    readlen = iocr.ret.rval_length;
     /* valid, but return a sense code */
     if ((size_t) readlen < len) {
         memset(outdata + readlen, 0, len - readlen);
@@ -97,7 +97,7 @@ int sgl_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     uint64_t inlen, pairs, offset_val, data_offset, length;
     unsigned int i;
-    struct osd_ioctl_read iocr;
+    struct osd_ioctl_rw iocr;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu", __func__,
             llu(pid), llu(oid), llu(len), llu(offset));
@@ -130,19 +130,19 @@ int sgl_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
         osd_debug("%s: Position in data buffer: %llu master offset %llu", __func__, llu(data_offset), llu(offset));
 
         osd_debug("%s: ------------------------------", __func__);
-        bzero(&iocr, sizeof(struct osd_ioctl_read));
+        bzero(&iocr, sizeof(struct osd_ioctl_rw));
         iocr.group = pid;
         iocr.object = oid;
         iocr.offset = offset + offset_val;
         iocr.length = length;
-        iocr.obj_data = (char *)(outdata + data_offset);
-        iocr.cdb_flags = 0;
+        iocr.ret.rval = (char *)(outdata + data_offset);
+        iocr.hdr.cdb_flags = 0;
 
         ret = ioctl(osd->handle->fd, OSD_IOCMD_READ, &iocr);
         osd_debug("%s: return value is %d", __func__, ret);
         if (ret < 0)
             goto out_hw_err;
-        ret = iocr.rval_length;
+        ret = iocr.ret.rval_length;
         if ((size_t) ret < length) {
             /* valid, fill with zeros */
             memset(outdata+data_offset+ret, 0, length - ret);
@@ -185,7 +185,7 @@ int vec_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     uint64_t inlen, bytes, hdr_offset, offset_val, data_offset, length, stride;
     unsigned int i;
-    struct osd_ioctl_read iocr;
+    struct osd_ioctl_rw iocr;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu", __func__,
             llu(pid), llu(oid), llu(len), llu(offset));
@@ -213,19 +213,19 @@ int vec_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
                 llu(data_offset));
         osd_debug("%s: Offset: %llu", __func__, llu(offset_val + offset));
         osd_debug("%s: ------------------------------", __func__);
-        bzero(&iocr, sizeof(struct osd_ioctl_read));
+        bzero(&iocr, sizeof(struct osd_ioctl_rw));
         iocr.group = pid;
         iocr.object = oid;
         iocr.offset = offset + offset_val;
         iocr.length = length;
-        iocr.obj_data = (char *)(outdata + data_offset);
-        iocr.cdb_flags = 0;
+        iocr.hdr.cdb_flags = 0;
+        iocr.ret.rval = (char *)(outdata + data_offset);
 
         ret = ioctl(osd->handle->fd, OSD_IOCMD_READ, &iocr);
         osd_debug("%s: return value is %d", __func__, ret);
-        if (ret < 0 || iocr.rval_length != length)
+        if (ret < 0 || iocr.ret.rval_length != length)
             goto out_hw_err;
-        ret = iocr.rval_length;
+        ret = iocr.ret.rval_length;
 
         readlen += ret;
         data_offset += length;
@@ -276,7 +276,7 @@ int contig_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
 {
     int ret;
     int fd;
-    struct osd_ioctl_write iocw;
+    struct osd_ioctl_rw iocw;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu data %p",
             __func__, llu(pid), llu(oid), llu(len), llu(offset), dinbuf);
@@ -286,19 +286,19 @@ int contig_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
     if (!(pid >= USEROBJECT_PID_LB && oid >= USEROBJECT_OID_LB))
         goto out_cdb_err;
 
-    bzero(&iocw, sizeof(struct osd_ioctl_write));
+    bzero(&iocw, sizeof(struct osd_ioctl_rw));
     iocw.group = pid;
     iocw.object = oid;
     iocw.offset = offset;
     iocw.length = len;
     iocw.obj_data = dinbuf;
-    iocw.cdb_flags = 0;
+    iocw.hdr.cdb_flags = 0;
 
     ret = ioctl(osd->handle->fd, OSD_IOCMD_WRITE, &iocw);
     osd_info("%s: return value is %d", __func__, ret);
-    if (ret < 0 || (uint64_t)iocw.rval_length != len)
+    if (ret < 0 || (uint64_t)iocw.ret.rval_length != len)
     {
-        osd_error("%s: len %llu rval_len %llu", __FUNCTION__, llu(len), llu(iocw.rval_length));
+        osd_error("%s: len %llu rval_len %llu", __FUNCTION__, llu(len), llu(iocw.ret.rval_length));
         goto out_hw_err;
     }
 
@@ -328,7 +328,7 @@ int sgl_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     uint64_t pairs, data_offset, offset_val, length;
     unsigned int i;
-    struct osd_ioctl_write iocw;
+    struct osd_ioctl_rw iocw;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu data %p",
             __func__, llu(pid), llu(oid), llu(len), llu(offset), dinbuf);
@@ -357,17 +357,17 @@ int sgl_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
                 __func__, llu(data_offset));
 
         osd_debug("%s: ------------------------------", __func__);
-        bzero(&iocw, sizeof(struct osd_ioctl_write));
+        bzero(&iocw, sizeof(struct osd_ioctl_rw));
         iocw.group = pid;
         iocw.object = oid;
         iocw.offset = offset_val+offset;
         iocw.length = length;
         iocw.obj_data = dinbuf+data_offset;
-        iocw.cdb_flags = 0;
+        iocw.hdr.cdb_flags = 0;
 
         ret = ioctl(osd->handle->fd, OSD_IOCMD_WRITE, &iocw);
         osd_info("%s: return value is %d", __func__, ret);
-        if (ret < 0 || (uint64_t)iocw.rval_length != length)
+        if (ret < 0 || (uint64_t)iocw.ret.rval_length != length)
             goto out_hw_err;
 
         data_offset += length;
@@ -399,7 +399,7 @@ int vec_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     uint64_t data_offset, offset_val, hdr_offset, length, stride, bytes;
     unsigned int i;
-    struct osd_ioctl_write iocw;
+    struct osd_ioctl_rw iocw;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu data %p",
             __func__, llu(pid), llu(oid), llu(len), llu(offset), dinbuf);
@@ -426,16 +426,16 @@ int vec_write(struct osd_device *osd, uint64_t pid, uint64_t oid,
                 llu(data_offset));
         osd_debug("%s: Offset: %llu", __func__, llu(offset_val + offset));
         osd_debug("%s: ------------------------------", __func__);
-        bzero(&iocw, sizeof(struct osd_ioctl_write));
+        bzero(&iocw, sizeof(struct osd_ioctl_rw));
         iocw.group = pid;
         iocw.object = oid;
         iocw.offset = offset_val + offset;
         iocw.length = length;
         iocw.obj_data = dinbuf + data_offset;
-        iocw.cdb_flags = 0;
+        iocw.hdr.cdb_flags = 0;
 
         ret = ioctl(osd->handle->fd, OSD_IOCMD_WRITE, &iocw);
-        if (ret < 0 || (uint64_t)iocw.rval_length != length)
+        if (ret < 0 || (uint64_t)iocw.ret.rval_length != length)
             goto out_hw_err;
         data_offset += length;
         offset_val += stride;
@@ -472,7 +472,6 @@ setup_root_paths (const char* root, struct osd_device *osd) {
     osd_set_progname(1, argv);  /* for debug messages from libosdutil */
     mhz = get_mhz(); /* XXX: find a better way of profiling */
 
-    osd_error("%s: got time", __func__);
     if (strlen(root) > MAXROOTLEN) {
         osd_error("strlen(%s) > MAXROOTLEN", root);
         ret = -ENAMETOOLONG;
@@ -481,7 +480,6 @@ setup_root_paths (const char* root, struct osd_device *osd) {
 
     memset(osd, 0, sizeof(*osd));
 
-    osd_error("%s: starting create_dir", __func__);
     /* test if root exists and is a directory */
     ret = create_dir(root);
     if (ret != 0) {
@@ -489,7 +487,6 @@ setup_root_paths (const char* root, struct osd_device *osd) {
         goto out;
     }
 
-    osd_error("%s: done create_dir", __func__);
     /* test create 'data/dfiles' sub-directory */
     sprintf(path, "%s/%s/", root, dfiles);
     ret = create_dir(path);
@@ -507,7 +504,6 @@ setup_root_paths (const char* root, struct osd_device *osd) {
 
     osd->handle = malloc(sizeof(*osd->handle));
 
-    osd_error("%s: done dfiles", __func__);
     sprintf(path, "%s/%s", root, dfiles);
     int fd = open(path, O_RDONLY);
     if(fd < 0){
@@ -529,7 +525,7 @@ int osd_create_datafile(struct osd_device *osd, uint64_t pid,
 
 int format_osd(struct osd_device *osd, uint64_t capacity, uint32_t cdb_cont_len, uint8_t *sense)
 {
-    int ret;
+    int ret = 0;
     char *root = NULL;
     char path[MAXNAMELEN];
     struct stat sb;
@@ -539,6 +535,10 @@ int format_osd(struct osd_device *osd, uint64_t capacity, uint32_t cdb_cont_len,
     assert(osd && osd->root && osd->handle && sense);
 
     root = strdup(osd->root);
+
+    if(osd->handle->fd != -1) {
+        goto out;
+    }
 
     ret = osd_close(osd);
     if (ret) {

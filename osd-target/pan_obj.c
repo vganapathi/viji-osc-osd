@@ -134,14 +134,14 @@ int obj_delete(void* handle, uint64_t pid, uint64_t oid)
     struct osd_ioctl_removeobject iocro;
     iocro.group = pid;
     iocro.object = oid;
-    iocro.cdb_flags = 0;
+    iocro.hdr.cdb_flags = 0;
     iocro.capacity_remaining = 0;
     iocro.capacity_freed = 0;
     ret = ioctl(((struct handle*)handle)->fd, OSD_IOCMD_REMOVEOBJECT, &iocro);
   } else {
     struct osd_ioctl_removeobjectgroup iocrog;
     iocrog.group = pid;
-    iocrog.cdb_flags = OSD_REMOVE_NONEMPTY;
+    iocrog.hdr.cdb_flags = OSD_REMOVE_NONEMPTY;
     ret = ioctl(((struct handle*)handle)->fd, OSD_IOCMD_REMOVEOBJECTGROUP, &iocrog);
   }
 	if (ret < 0) {
