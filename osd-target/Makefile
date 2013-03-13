@@ -41,16 +41,13 @@ CFLAGS += -D__PANASAS_OSD__
 ifeq ($(PANASAS_OSDSIM),1)
 CFLAGS += -D__PANASAS_OSDSIM__
 endif
+else
+# PANASAS_OSD does not use DB for anything
+TGT_EXTRA_LIBS = -lsqlite3
 endif
 
-
-LIBS += -lm -lcrypto -laio -lavahi-core -lavahi-common \
+LIBS += $(TGT_EXTRA_LIBS) -lm -lcrypto -laio -lavahi-core -lavahi-common \
 	$(IB_HW_OF_LIBS) -libverbs -lrdmacm
-
-ifneq ($(PANASAS_OSD),1)
-LIBS += -lsqlite3
-endif
-
 
 CC := gcc
 CPP_M := -MM
