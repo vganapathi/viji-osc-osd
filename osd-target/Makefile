@@ -5,12 +5,12 @@
 -include ../Makedefs
 
 ifeq ($(PANASAS_OSD),1)
-SRC := pan_coll.c pan_mtq.c pan_attr.c pan_obj.c osd.c pan_io.c cdb.c osd-sense.c list-entry.c
-INC := attr.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h
+SRC := pan_coll.c pan_mtq.c pan_attr.c pan_obj.c osd.c pan_io.c cdb.c osd-sense.c list-entry.c cap.c pan_cap_subr.c
+INC := attr.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h cap.h
 else
-SRC := attr.c db.c obj.c osd-schema.c osd.c io.c cdb.c osd-sense.c list-entry.c
+SRC := attr.c db.c obj.c osd-schema.c osd.c io.c cdb.c osd-sense.c list-entry.c cap.c cap_subr.c
 SRC += osd-schema.c coll.c mtq.c
-INC := attr.h db.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h
+INC := attr.h db.h obj.h osd-types.h osd.h cdb.h list-entry.h target-sense.h io.h cap.h
 INC += coll.h mtq.h
 endif
 DEP := .depend

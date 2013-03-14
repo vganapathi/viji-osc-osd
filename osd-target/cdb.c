@@ -30,6 +30,7 @@
 #include "cdb.h"
 #include "osd-util/osd-util.h"
 #include "list-entry.h"
+#include "cap.h"
 
 #ifdef __DBUS_STATS__
 #include "dbus/server_stats.h"
@@ -1556,6 +1557,16 @@ static void exec_service_action(struct command *cmd)
 			goto out_exec;
 	}
 
+        ret = cap_check(osd, cdb, pid, oid, cmd->action);
+        if(!ret)
+        {
+            osd_debug("%s: cap_check failed %d!", __func__, ret);
+            ret = sense_build_sdd(sense, OSD_SSK_DATA_PROTECTION,
+                        OSD_ASC_INVALID_FIELD_IN_CDB, pid, oid);
+            goto out_exec;
+        }
+	
+        osd_debug("%s: cap_check passed %d!", __func__, ret);
         osd_debug("%s: ip %s root %s", __func__, cmd->initiator_ip, osd->root); 
 
 #ifdef __DBUS_STATS__
@@ -2048,6 +2059,7 @@ static void exec_service_action(struct command *cmd)
 		break;
 	}
 	default:
+                osd_debug("%s: going to default!", __func__);
 		ret = osd_error_unimplemented(cmd->action, sense);
 	}
 

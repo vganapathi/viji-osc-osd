@@ -463,9 +463,10 @@ int _attr_get_attr(void* ohandle, uint64_t pid, uint64_t oid,
     }
     osd_debug("++++++++%s: attr.val %p, attr.len %u", 
             __func__, out_attr.value, out_attr.length);
+
     if(listfmt == 0) {
         //Don't format the values
-        outdata = out_attr.value;
+        memcpy(outdata, out_attr.value, sizeof(uint8_t)*out_attr.length);
         outlen = out_attr.length;
         osd_debug("%s: returning without formatting!", __func__);
         return 0;

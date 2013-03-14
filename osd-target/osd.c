@@ -39,6 +39,7 @@
 #include "osd-util/osd-sense.h"
 #include "list-entry.h"
 #include "io.h"
+#include "cap.h"
 
 #ifdef __DBUS_STATS__
 #include "dbus/osc_osd_dbus.h"
@@ -781,6 +782,8 @@ int osd_open(const char *root, struct osd_device *osd)
     osd_debug("%s: root %s", __func__, root);
 
     int ret = setup_root_paths(root, osd);
+
+    cap_initialize_tables();
 
 #ifdef __DBUS_STATS__
     gsh_dbus_pkginit();
