@@ -32,7 +32,6 @@
 
 #include "osd.h"
 #include "target-sense.h"
-//#include "db.h"
 #include "attr.h"
 #include "obj.h"
 #include "coll.h"
@@ -40,6 +39,11 @@
 #include "osd-util/osd-sense.h"
 #include "list-entry.h"
 #include "io.h"
+
+#ifdef __DBUS_STATS__
+#include "dbus/osc_osd_dbus.h"
+#include "dbus/client_mgr.h"
+#endif
 
 #define min(x,y) ({ \
         typeof(x) _x = (x);	\
@@ -774,7 +778,15 @@ void osd_device_free(struct osd_device *osd)
 int osd_open(const char *root, struct osd_device *osd)
 {
 
+    osd_debug("%s: root %s", __func__, root);
+
     int ret = setup_root_paths(root, osd);
+
+#ifdef __DBUS_STATS__
+    gsh_dbus_pkginit();
+    gsh_client_init();
+#endif
+
 out:
     if (ret != 0)
         osd_error("%s: => %d", __func__, ret);
@@ -1256,8 +1268,8 @@ int osd_create(struct osd_device *osd, uint64_t pid, uint64_t requested_oid,
     uint64_t oid = 0;
 
     TICK_TRACE(osd_create);
-    osd_debug("%s: pid %llu requested oid %llu numoid %hu", __func__,
-            llu(pid), llu(requested_oid), numoid);
+    osd_debug("%s: root %s pid %llu requested oid %llu numoid %hu", __func__,
+            osd->root, llu(pid), llu(requested_oid), numoid);
 
     assert(osd && osd->root && osd->handle && sense);
 
@@ -1464,9 +1476,10 @@ int osd_create_partition(struct osd_device *osd, uint64_t requested_pid,
     int ret = 0;
     uint64_t pid = 0;
 
-    osd_debug("%s: pid %llu", __func__, llu(requested_pid));
 
     assert(osd && osd->root && osd->handle && sense);
+
+    osd_debug("%s: root %s pid %llu", __func__, osd->root, llu(requested_pid));
 
     if (requested_pid != 0 && requested_pid < PARTITION_PID_LB)
         goto out_cdb_err;

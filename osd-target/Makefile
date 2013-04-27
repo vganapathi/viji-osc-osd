@@ -16,7 +16,7 @@ endif
 DEP := .depend
 OBJ := $(SRC:.c=.o)
 TESTDIR := ./tests/
-UTILDIR := ../osd-util/
+UTILDIR := ../osd-util/ ../dbus/
 STGTDIR := ../tgt/
 INITDIR := ../osd-initiator/
 OSDTARGETLIB := libosdtgt.a
@@ -29,7 +29,7 @@ IB_HW_OF_LIBS= -L/usr/local/openib-iser/lib
 ifeq ($(FreeBSD_Make),1)
 LIBS += -L/usr/local/lib/
 ifeq ($(PANASAS_OSD),1)
-CFLAGS += -I/usr/local/include -I/usr/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr -I../../../export/include/ -I../../freebsd-c/sys/
+CFLAGS += -I/usr/local/include -I/usr/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr -I../../../export/include/ 
 else
 CFLAGS += -I/usr/local/include -I/usr/include -I$(STGTDIR)/usr/bsd -I$(STGTDIR)/usr 
 endif
@@ -49,6 +49,12 @@ endif
 LIBS += $(TGT_EXTRA_LIBS) -lm -lcrypto -laio -lavahi-core -lavahi-common \
 	$(IB_HW_OF_LIBS) -libverbs -lrdmacm
 
+ifeq ($(DBUS_STATS),1)
+UTILLIB += ../dbus/libosddbus.a
+CFLAGS += -D__DBUS_STATS__ -I../dbus -I/usr/local/include/dbus-1.0 -I/usr/local/include/dbus-1.0/include
+LIBS += -ldbus-glib-1 -ldbus-1 -lglib-2.0 -lgobject-2.0 -lgio-2.0
+endif
+
 CC := gcc
 CPP_M := -MM
 LD := $(CC)
@@ -56,8 +62,9 @@ COPTS := $(OPT)
 COPTS += -fPIC -foptimize-sibling-calls -D_GNU_SOURCE
 CWARN := -Wall -W -Wpointer-arith -Wwrite-strings -Wcast-align -Wcast-qual \
 	-Wbad-function-cast -Wundef -Wmissing-prototypes \
-	-Wmissing-declarations -Wnested-externs -Werror
-CFLAGS += -g $(COPTS) $(CWARN) -I.. -Wno-unused -I../osd-util
+	-Wmissing-declarations -Wnested-externs
+	#-Wmissing-declarations -Wnested-externs -Werror
+CFLAGS += -g $(COPTS) $(CWARN) -I.. -Wno-unused -I../osd-util 
 
 ifeq ($(PVFS_OSD_INTEGRATED),1)
 CFLAGS += -DPVFS_OSD_INTEGRATED

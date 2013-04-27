@@ -31,6 +31,10 @@
 #include "osd-util/osd-util.h"
 #include "list-entry.h"
 
+#ifdef __DBUS_STATS__
+#include "dbus/server_stats.h"
+#endif
+
 /*
  * Aggregate parameters for function calls in this file.
  */
@@ -66,6 +70,7 @@ struct command {
 	uint32_t get_used_outlen;
 	uint8_t sense[OSD_MAX_SENSE];
 	int senselen;
+        char *initiator_ip;
 };
 
 static int get_attr_page(struct command *cmd, uint64_t pid, uint64_t oid,
@@ -880,6 +885,7 @@ static int cdb_read(struct command *cmd, uint32_t cdb_cont_len)
 		rec_err_sense = ret; /* save ret */
 	}
 
+
 	ret = set_attributes(cmd, pid, oid, 1, cdb_cont_len);
 	if (ret)
 		return ret;
@@ -1531,8 +1537,17 @@ static void exec_service_action(struct command *cmd)
 	uint64_t pid = get_ntohll(&cdb[16]);
 	uint64_t oid = get_ntohll(&cdb[24]);
 	int ret;
-	
+
+#ifdef __DBUS_STATS__
+        struct req_op_context req_ctx;
+        unsigned char addrbuf[16];
+        bool success = true;
+        struct gsh_client *client;
+        struct sockaddr_in sockaddr;
+#endif
+
 	osd_debug("%s: start 0x%x cdb_cont_len %llu", __func__, cmd->action, llu(cdb_cont_len));
+
 
 	if (cdb_cont_len != 0) {
 		ret = parse_cdb_continuation_segment(cmd, cdb_cont_len,
@@ -1541,7 +1556,23 @@ static void exec_service_action(struct command *cmd)
 			goto out_exec;
 	}
 
-	
+        osd_debug("%s: ip %s root %s", __func__, cmd->initiator_ip, osd->root); 
+
+#ifdef __DBUS_STATS__
+        memset(&req_ctx, 0, sizeof(struct req_op_context));
+        if(inet_pton(AF_INET, cmd->initiator_ip, addrbuf) == 1) {
+            sockaddr.sin_family = AF_INET;
+            memcpy(&(((struct sockaddr_in *)&sockaddr)->sin_addr),
+                    addrbuf, 4);
+        }
+
+        client = get_gsh_client(&sockaddr, false);
+
+        req_ctx.client = client;
+        req_ctx.start_time = 0;
+        req_ctx.queue_wait = 0;
+#endif
+
 	switch (cmd->action) {
 	case OSD_APPEND: {
 		uint8_t ddt;
@@ -1846,7 +1877,13 @@ static void exec_service_action(struct command *cmd)
 	}
 
 	case OSD_READ: {
+                uint64_t len = get_ntohll(&cmd->cdb[32]);
 	        ret = cdb_read(cmd, cdb_cont_len);
+
+#ifdef __DBUS_STATS__
+                osd_debug("%s: read calling server_stats_io_done outlen %llu used %llu len %llu\n", __func__, llu(cmd->outlen), llu(cmd->used_outlen), llu(len));
+                server_stats_io_done(&req_ctx, -1, len, cmd->used_outlen, 1, 0);
+#endif
 		break;
 	}
 	case OSD_REFRESH_SNAPSHOT_OR_CLONE: {
@@ -1986,6 +2023,12 @@ static void exec_service_action(struct command *cmd)
 			break;
 
 		ret = std_get_set_attr(cmd, pid, oid, cdb_cont_len);
+
+#ifdef __DBUS_STATS__
+                osd_debug("%s: write calling server_stats_io_done len %llu outlen %llu used %llu\n", __func__, llu(len), llu(cmd->outlen), llu(cmd->used_outlen));
+                server_stats_io_done(&req_ctx, -1, len, len, 1, 1);
+#endif
+
 		break;
 	}
 	case OSD_CAS: {
@@ -2077,12 +2120,14 @@ static int calc_max_out_len(struct command *cmd)
  * OSD will produce.  You can modify the data_out and data_out_len to return
  * a new buffer, or short read result.
  */
-int osdemu_cmd_submit(struct osd_device *osd, uint8_t *cdb,
+int osdemu_cmd_submit(struct osd_device *osd, char *ip, uint8_t *cdb,
 		      const uint8_t *data_in, uint64_t data_in_len,
 		      uint8_t **data_out, uint64_t *data_out_len,
 		      uint8_t *sense_out, int *senselen_out)
 {
+
 	int ret = 0;
+
 	struct command cmd = {
 		.osd = osd,
 		.cdb = cdb,
@@ -2107,8 +2152,12 @@ int osdemu_cmd_submit(struct osd_device *osd, uint8_t *cdb,
 			.num_descriptors = 0,
 			.descriptors = NULL,
 		},
+                .initiator_ip = ip,
 	};
 
+        osd_debug("%s: root %s\n", __func__, osd->root);
+
+                                                     
 	/* check cdb opcode and length */
 	if (cdb[0] != VARLEN_CDB || cdb[7] != OSD_CDB_SIZE - 8)
 		goto out_opcode_err;
@@ -2133,6 +2182,7 @@ int osdemu_cmd_submit(struct osd_device *osd, uint8_t *cdb,
 	}
 
 	exec_service_action(&cmd); /* run the command. */
+
 
 	/*
 	 * If some retrieved attributes are going back (get_used_outlen),

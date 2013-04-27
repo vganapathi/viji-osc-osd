@@ -4,6 +4,7 @@
 
 MK_PATH ?= $(PWD)
 util := $(MK_PATH)/osd-util
+dbus := $(MK_PATH)/dbus
 tgt := $(MK_PATH)/tgt
 target := $(MK_PATH)/osd-target
 CHECKPATCH ?= ~/dev/git/pub/scsi-misc/scripts/checkpatch.pl
@@ -14,7 +15,7 @@ checkpatch_2_kdev = checkpatch-2-kdev
 all: target
 all: stgt
 
-clean: stgt_clean target_clean util_clean
+clean: stgt_clean target_clean util_clean dbus_clean
 
 .PHONY: util util_clean
 util:
@@ -23,8 +24,15 @@ util:
 util_clean:
 	$(MAKE) -C $(util) clean
 
+.PHONY: dbus dbus_clean
+dbus::
+	$(MAKE) -C $(dbus)
+
+dbus_clean::
+	$(MAKE) -C $(dbus) clean
+
 .PHONY: target target_test target_clean
-target: util
+target: util dbus
 	$(MAKE) -C $(target)
 
 target_clean:
@@ -59,7 +67,7 @@ dist:
 
 # ctags generation for all projects
 ctags:
-	ctags -R $(util) $(target) $(tgt) /usr/include
+	ctags -R $(util) $(dbus) $(target) $(tgt) /usr/include
 
 osd_checkpatch:
 	git show | $(CHECKPATCH) - | $(checkpatch_2_kdev) $(PWD)

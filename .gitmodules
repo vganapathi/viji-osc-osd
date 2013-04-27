@@ -1,3 +1,6 @@
 [submodule "tgt"]
 	path = tgt
 	url = ./tgt.git
+[submodule "dbus"]
+	path = dbus
+	url = ./dbus.git

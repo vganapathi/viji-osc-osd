@@ -462,7 +462,8 @@ out_cdb_err:
 }
 
 int 
-setup_root_paths (const char* root, struct osd_device *osd) {
+setup_root_paths (const char* root, struct osd_device *osd) 
+{
 
     int i = 0;
     int ret = 0;
@@ -502,6 +503,8 @@ setup_root_paths (const char* root, struct osd_device *osd) {
         goto out;
     }
 
+    osd_debug("%s: root %s", __func__, osd->root);
+
     osd->handle = malloc(sizeof(*osd->handle));
 
     sprintf(path, "%s/%s", root, dfiles);
@@ -530,11 +533,12 @@ int format_osd(struct osd_device *osd, uint64_t capacity, uint32_t cdb_cont_len,
     char path[MAXNAMELEN];
     struct stat sb;
 
-    osd_debug("%s: capacity %llu MB", __func__, llu(capacity >> 20));
 
     assert(osd && osd->root && osd->handle && sense);
 
     root = strdup(osd->root);
+
+    osd_debug("%s: osd root %s capacity %llu MB", __func__, osd->root, llu(capacity >> 20));
 
     if(osd->handle->fd != -1) {
         goto out;
@@ -578,6 +582,10 @@ int osd_end_txn(struct osd_device *osd)
 int osd_close(struct osd_device *osd)
 {
     int ret = 0;
+
+#ifdef __DBUS_STATS__
+    gsh_dbus_pkgshutdown();
+#endif
 
     free(osd->root);
     osd->root = NULL;
