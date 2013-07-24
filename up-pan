@@ -1,59 +1,70 @@
-#!/bin/csh
+#!/bin/sh
+
+# ignore all signals to allow external controllers 
+# to kill the process group
+trap " " 0 1 2 3 6 15
 
 # On Pan-OSD there is only one target
-set BACKSTORE0=/root/pandata/
+BACKSTORE0=/root/pandata/
 # Path to pan_tgtd executables, assuming p4 integration
-set dir=/pan/bin
-set TGTADM=$dir/tgtadm
-set OTGTD_NAME=pan_tgtd
-set OTGTD=$dir/$OTGTD_NAME
+dir=/pan/bin
+TGTADM=$dir/tgtadm
+OTGTD_NAME=pan_tgtd
+OTGTD=$dir/$OTGTD_NAME
 
 # Get the osd device id
-set TARGETNAME=`/pan/bin/getdevinfo -q datasn`
+TARGETNAME=`/pan/bin/getdevinfo -q datasn`
 # logfile name
-set LOG="/var/log/otgtd.log"
+LOG="/var/log/otgtd.log"
 
-set WAIT=0
+# Do pre-lim checks
+osdfs_mounted=`/sbin/kldstat | grep osdfs.ko | awk '{print $5}' `
+if [ "x${osdfs_mounted}" = "x" ]; then
+        echo "up-pan: OSDfs is not mounted..exiting"        
+        exit 0
+fi
 
-switch($1)
-case "down":
-	killall $OTGTD_NAME
-	exit
-	breaksw
+stat=`ps ax | grep $OTGTD_NAME`
+if [ "x${stat}" != "x" ]; then
+        # echo "up-pan: $OTGTD_NAME already running!"
+        killall $OTGTD_NAME
+fi
 
-case "log":
-	less +F $LOG
-	exit
-	breaksw
+WAIT=0
 
-case "log-reset":
-	echo > $LOG
-	exit
-	breaksw
+case "$1" in
+	"down" )
+		killall $OTGTD_NAME
+		exit 0
+		;;
+	"log" )
+		less +F $LOG
+		exit 0
+		;;
+	"log-reset" )
+		echo > $LOG
+		exit 0
+		;;
+	"stat" )
+        	if [ "x${stat}" -eq "x" ]; then
+                	echo "DOWN"
+        	else
+                	echo "UP"
+        	fi
+		exit 0
+		;;
+	"wait" )
+        	WAIT=1
+       		;; 
+	* )
+		if [ "x${1}" -ne "x" ]; then 
+			echo "what is $0 $1?!?"
+			exit 0
+        	fi
+		;;
+esac
 
-case "stat":
-	set stat=`ps ax | grep pan_tgtd`
-        if ( "x${stat}" == "x" ) then
-                echo "DOWN"
-        else
-                echo "UP"
-        endif
-	exit
-	breaksw
-
-case "wait"
-        set WAIT=1
-        breaksw
-
-default:
-	if ("$1" != "") then 
-		echo "what is $0 $1?!?"
-		exit
-        endif
-	breaksw
-endsw
-
-# On Panasas-osd we must make sure that:
+# On Panasas-osd we must make sure that
 mkdir -p $BACKSTORE0/
 ln -shf /pandata  $BACKSTORE0/dfiles 
 
@@ -63,27 +74,27 @@ echo "================ `date` =========================" >> $LOG
 # -f - forgraound
 # -d - debug level
 # DEBUG="-d 9"
-set DEBUG=""
-$OTGTD $DEBUG --iscsi portal=:3251 -f >>& $LOG  &
+DEBUG=""
+$OTGTD $DEBUG --iscsi portal=":3251" -f >> $LOG & 
 
 sleep 2
 
 # 2nd Load the target
 #load_target $BACKSTORE0 1
-$TGTADM --lld iscsi --mode target --op new --tid 1 --targetname=$TARGETNAME
+
+$TGTADM --lld iscsi --mode target --op new --tid 1 --targetname="$TARGETNAME"
 $TGTADM --lld iscsi --mode target \
 	--op bind --tid 1 --initiator-address ALL
 
 $TGTADM --lld iscsi --mode logicalunit \
 	--op new --tid 1 --lun 0 --bstype=osdemu --device-type osd \
-	--backing-store $BACKSTORE0 --osd_name 06$TARGETNAME
+	--backing-store $BACKSTORE0 --osd_name "06$TARGETNAME"
 
 # Last print what we got
 $TGTADM --lld iscsi --mode target --op show
 
 echo "otgtd started, run up down to stop"
 
-if ($WAIT) then
+if [ "$WAIT" -eq 1 ]; then
         wait
-endif
-
+fi
