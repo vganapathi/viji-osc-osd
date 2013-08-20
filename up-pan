@@ -46,7 +46,7 @@ case "$1" in
 		exit 0
 		;;
 	"stat" )
-        	if [ "x${stat}" -eq "x" ]; then
+        	if [ "x${stat}" = "x" ]; then
                 	echo "DOWN"
         	else
                 	echo "UP"
@@ -75,7 +75,7 @@ echo "================ `date` =========================" >> $LOG
 # -d - debug level
 # DEBUG="-d 9"
 DEBUG=""
-$OTGTD $DEBUG --iscsi portal=":3251" -f >> $LOG & 
+$OTGTD $DEBUG --iscsi portal=":3251" -f 1>> $LOG 2>&1 &
 
 sleep 2
 
