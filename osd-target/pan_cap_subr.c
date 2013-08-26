@@ -176,9 +176,9 @@ cap_passes_basic_tests(void *handle, struct osd_v2_capability *caps, uint64_t pi
     memcpy(&exp_time, &caps->h.expiration_time.time, sizeof(uint8_t) *6);
     osd_debug("%s:  now: %llu \t exp_time: %llu",
             __func__, llu(now), llu(exp_time));
-    if (now > exp_time) {
+    if (exp_time > 0 && now > exp_time) {
         osd_error ( "%s: Cap has expired. diff (%llu)\n",
-                __func__, llu((uint64_t)now - (uint64_t)caps->h.expiration_time.time));
+                __func__, llu(now - exp_time));
         return 0;
     }
 
