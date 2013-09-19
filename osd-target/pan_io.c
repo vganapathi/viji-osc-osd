@@ -38,6 +38,7 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     struct osd_ioctl_openclose ioco;
     struct osd_ioctl_rw iocr;
+    errno = 0;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu", __func__,
             llu(pid), llu(oid), llu(len), llu(offset));
@@ -57,14 +58,15 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     iocr.hdr.cdb_flags = 0;
 
     ret = ioctl(osd->handle->fd, OSD_IOCMD_READ, &iocr);
-    if ((ret < 0) || iocr.ret.rval_length != len ) {
-        osd_error("%s: len %llu rval_len %llu", __FUNCTION__, llu(len), llu(iocr.ret.rval_length));
+    if (ret < 0) {
+        osd_debug("%s: ret = %d errno= %s len %llu rval_len %llu", __FUNCTION__, ret, strerror(errno), llu(len), llu(iocr.ret.rval_length)); 
         goto out_hw_err;
     }
 
     readlen = iocr.ret.rval_length;
     /* valid, but return a sense code */
     if ((size_t) readlen < len) {
+        osd_debug("%s: ret = %d len %llu rval_len %llu", __FUNCTION__, ret, llu(len), llu(readlen));
         memset(outdata + readlen, 0, len - readlen);
         ret = sense_build_sdd_csi(sense, OSD_SSK_RECOVERED_ERROR,
                 OSD_ASC_READ_PAST_END_OF_USER_OBJECT,
@@ -223,7 +225,7 @@ int vec_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
 
         ret = ioctl(osd->handle->fd, OSD_IOCMD_READ, &iocr);
         osd_debug("%s: return value is %d", __func__, ret);
-        if (ret < 0 || iocr.ret.rval_length != length)
+        if (ret < 0)
             goto out_hw_err;
         ret = iocr.ret.rval_length;
 
