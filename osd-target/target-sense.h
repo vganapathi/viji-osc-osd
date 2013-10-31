@@ -18,6 +18,14 @@
 #ifndef __TARGET_SENSE_H
 #define __TARGET_SENSE_H
 
+/* Additional information for invalid_field_in_cdb errors */
+enum sense_cdb_field_offset {
+   	CFO_STARTING_BYTE 	= 	40,
+	CFO_PARTITION_ID 	= 	16,
+	CFO_OBJECT_ID 		= 	24,
+	CFO_PERMISSIONS 	= 	129,
+};
+
 #define sense_header_build(data, len, key, code, additional_len) \
 	_sense_header_build(data, len, key, code, additional_len, __func__, __LINE__)
 int _sense_header_build(uint8_t *data, int len, uint8_t key, uint16_t code,
@@ -41,6 +49,12 @@ int _sense_basic_build(uint8_t *sense, uint8_t key, uint16_t code,
 	_sense_build_sdd(sense, key, code, pid, oid, __func__, __LINE__)
 int _sense_build_sdd(uint8_t *sense, uint8_t key, uint16_t code,
 		    uint64_t pid, uint64_t oid, const char *file, int line);
+
+/* Sense key specific data descriptor */
+#define sense_build_sks(sense, key, code, cfo, pid, oid) \
+	_sense_build_sks(sense, key, code, cfo, pid, oid, __func__, __LINE__)
+int _sense_build_sks(uint8_t *sense, uint8_t key, uint16_t code,
+		    uint16_t cfo, uint64_t pid, uint64_t oid, const char *file, int line);
 
 #define sense_build_sdd_csi(sense, key, code, pid, oid, csi) \
 	_sense_build_sdd_csi(sense, key, code, pid, oid, csi, __func__, __LINE__)

@@ -64,6 +64,19 @@ static int sense_info_build(uint8_t *data, int len, uint32_t not_init_funcs,
 }
 
 /*
+ * OSD sense key specific sense data descriptor provides additional
+ * info about the exception.  spc-3 (see 4.5.2.4) 
+ */
+static int sense_sks_info_build(uint8_t *data, uint16_t cfo)
+{
+	data[0] = 0x2;
+	data[1] = 0x6;
+	set_htons(&data[5], cfo);
+	osd_warning("  sense-key cfo=%lx ", cfo);
+	return 8;
+}
+
+/*
  * SPC-3 command-specific information sense data descriptor.  p. 33.
  */
 static int sense_csi_build(uint8_t *data, int len, uint64_t csi)
@@ -109,6 +122,20 @@ int _sense_build_sdd(uint8_t *sense, uint8_t key, uint16_t code,
 	return off;
 }
 
+/*
+ * Header for sense key specific data.
+ */
+int _sense_build_sks(uint8_t *sense, uint8_t key, uint16_t code, uint16_t cfo,
+		    uint64_t pid, uint64_t oid, const char *file, int line)
+{
+	uint8_t off = 0;
+	uint8_t len = OSD_MAX_SENSE;
+	uint32_t nifunc = 0x303010b0;  /* non-reserved bits */
+
+	off = _sense_header_build(sense+off, len-off, key, code, 32, file, line);
+	off += sense_sks_info_build(sense+off, cfo);
+	return off;
+}
 /*
  * Sense header, info section with pid and oid, and "info" section
  * with an arbitrary u64.

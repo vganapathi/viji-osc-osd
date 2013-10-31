@@ -38,6 +38,7 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     char path[MAXNAMELEN];
     struct osd_ioctl_openclose ioco;
     struct osd_ioctl_rw iocr;
+    uint16_t cfo;
     errno = 0;
 
     osd_debug("%s: pid %llu oid %llu len %llu offset %llu", __func__,
@@ -79,8 +80,12 @@ int contig_read(struct osd_device *osd, uint64_t pid, uint64_t oid,
     return OSD_OK;
 
 out_hw_err:
-    ret = sense_build_sdd(sense, OSD_SSK_HARDWARE_ERROR,
-            OSD_ASC_INVALID_FIELD_IN_CDB, pid, oid);
+    cfo = CFO_OBJECT_ID;
+    if (errno == EINVAL) {
+	cfo = CFO_STARTING_BYTE;
+    }
+    ret = sense_build_sks(sense, OSD_SSK_HARDWARE_ERROR,
+            OSD_ASC_INVALID_FIELD_IN_CDB, cfo, pid, oid);
     return ret;
 
 out_cdb_err:
